@@ -3,6 +3,7 @@
 	import durand from 'durand-kerner'
 	
 	const formatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+	const signedFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2, 'signDisplay': 'always' });
 	const svgNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 	const sampleRate = 40
 
@@ -13,7 +14,7 @@
 		},
 		'Low pass': {
 			a: [.25,.25],
-			b: [-1,.5]
+			b: [1,-.5]
 		},
 		'Unstable': {
 			a: [.2,-.3,0.4,-0.1],
@@ -27,7 +28,7 @@
 	}
 
 	let a = [1]
-	const minOrderA = 1
+	const minOrderA = 0
 	const maxOrderA = Math.floor(sampleRate / 2)
 	
 	
@@ -45,7 +46,7 @@
 	}
 
 	$: roots = findRoots(a.map(v=>v).reverse())
-	$: poles = findRoots([1,...b].reverse())
+	$: poles = findRoots([-1,...b].map((v)=>-v).reverse())
 
 	$: poleMagnitudesSquares = poles[0] ? poles[0].map((_,i) => poles[0][i]*poles[0][i] + poles[1][i]*poles[1][i]) : []
 
@@ -68,23 +69,23 @@
 		if(cache[i] === undefined) 
 
 		cache[i] = a.reduce((sum, aa, j) => sum + aa*(input[i-j]||0), 0) +
-			b.reduce((sum,bb,k) => sum + -bb * getOutputAt(input, a, b, i-k-1, cache), 0)
+			b.reduce((sum,bb,k) => sum + bb * getOutputAt(input, a, b, i-k-1, cache), 0)
 
 		return cache[i]
 	}
 
 	$: output = input.map((_,i) => getOutputAt(input, a, b, i))
-	$: outputFormular = [
+	$: outputFormular = 'y[n] = ' + [
 		...a
-		.map((c,i) => c==0 ? false : i > 0 ? `${formatter.format(c)}⋅X[n-${i}]` : `${formatter.format(c)}⋅X[n]`)
+		.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}*x[n-${i}]` : `${formatter.format(c)}*x[n]`)
 		.filter((t) => t != false),
 		...b
-		.map((c,i) => c==0 ? false : i > 0 ? `${formatter.format(c)}⋅Y[n-${i+1}]` : `${formatter.format(c)}⋅Y[n-1]`)
+		.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}*y[n-${i+1}]` : `${formatter.format(c)}*y[n-1]`)
 		.filter((t) => t != false)
-	].join(' + ')
+	].join(' ')
 
 	function setOrderA(o) {
-		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA)
+		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA) + 1
 		
 		a = Array(orderA).fill(0).map((z,i) => a[i] || z)
 	}
@@ -339,8 +340,8 @@
 	</legend>
 	<dl>
 		<dt><label for="order">Delay count</label></dt>
-		<dd><input size="4" step="1" min={minOrderA} max={maxOrderA} type="number" value={a.length} on:input={inputOrderA} /></dd>
-		<dd class="full"><input type="range" step="1" min={minOrderA} max={maxOrderA} value={a.length} on:input={inputOrderA} /></dd>
+		<dd><input size="4" step="1" min={minOrderA} max={maxOrderA} type="number" value={a.length-1} on:input={inputOrderA} /></dd>
+		<dd class="full"><input type="range" step="1" min={minOrderA} max={maxOrderA} value={a.length-1} on:input={inputOrderA} /></dd>
 	</dl>
 		
 	</fieldset>
@@ -393,7 +394,7 @@
 		</svg>
 
 		<div class="formular">
-			Y[n] = {outputFormular}
+			{outputFormular}
 		</div>
 		<hr>
 		<h2>Pole/Zero Plot</h2>
@@ -429,7 +430,7 @@
 			{#if poles[0]}
 			<ul>
 				{#each poles[0] as r, i}
-				 <li>{formatter.format(poles[0][i])}{poles[1][i]<0?'-':'+'}{formatter.format(Math.abs(poles[1][i]))}i</li>
+				 <li>{formatter.format(poles[0][i])}{signedFormatter.format(poles[1][i])}i</li>
 				{/each}
 			</ul>
 			{:else}
@@ -440,7 +441,7 @@
 			{#if roots[0]}
 			<ul >
 				{#each roots[0] as r, i}
-				 <li>{formatter.format(roots[0][i])}{roots[1][i]<0?'-':'+'}{formatter.format(Math.abs(roots[1][i]))}i</li>
+				 <li>{formatter.format(roots[0][i])}{signedFormatter.format(roots[1][i])}i</li>
 				{/each}
 			</ul>
 			{:else}
