@@ -1,5 +1,6 @@
 <script>
 	import Mesh from './Mesh.svelte'
+	import Link from './Link.svelte'
 	import durand from 'durand-kerner'
 	
 	const formatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
@@ -45,7 +46,7 @@
 		return durand(arr)
 	}
 
-	$: roots = findRoots(a.map(v=>v).reverse())
+	$: zeros = findRoots(a.map(v=>v).reverse())
 	$: poles = findRoots([-1,...b].map((v)=>-v).reverse())
 
 	$: poleMagnitudesSquares = poles[0] ? poles[0].map((_,i) => poles[0][i]*poles[0][i] + poles[1][i]*poles[1][i]) : []
@@ -75,14 +76,40 @@
 	}
 
 	$: output = input.map((_,i) => getOutputAt(input, a, b, i))
-	$: outputFormular = 'y[n] = ' + [
-		...a
-		.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}*x[n-${i}]` : `${formatter.format(c)}*x[n]`)
-		.filter((t) => t != false),
-		...b
-		.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}*y[n-${i+1}]` : `${formatter.format(c)}*y[n-1]`)
-		.filter((t) => t != false)
-	].join(' ')
+	$: outputFormularTime = 'y[n] = ' + ([
+			...a
+			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)} ⋅ x[n-${i}]` : `${formatter.format(c)} ⋅ x[n]`)
+			.filter((t) => t != false),
+			...b
+			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)} ⋅ y[n-${i+1}]` : `${formatter.format(c)} ⋅ y[n-1]`)
+			.filter((t) => t != false)
+		].join(' ') || 0)
+
+	$: outputFormularFreq = 'Y(z) = ' + [([
+			...a
+			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}⋅z^(-${i}) ⋅ X(z)` : `${formatter.format(c)} ⋅ X(z)`)
+			.filter((t) => t != false),
+		].join(' ') || 0), ([
+			...b
+			.map((c,i) => c==0 ? false : `${(i>0?signedFormatter:formatter).format(c)}⋅z^(-${i+1}) ⋅ Y(z)`)
+			.filter((t) => t != false)
+		].join(' ') || 0)
+	].filter((v,i) => v != 0).join(' + ')
+
+	$: outputFormularTransfer = 'Y(z)/X(z) = (' + ([
+			...a
+			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}⋅z^(-${i})` : `${formatter.format(c)}`)
+			.filter((t) => t != false),
+		].join(' ') || 0)  + ') / (1 - ' + ([
+			...b
+			.map((c,i) => c==0 ? false : `${(i>0?signedFormatter:formatter).format(c)}⋅z^(-${i+1})`)
+			.filter((t) => t != false)
+		].join(' ') || 0) + ')'
+
+	let selectedOutput = 0
+	$: outputs = [outputFormularTime,
+		outputFormularFreq,
+		outputFormularTransfer]
 
 	function setOrderA(o) {
 		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA) + 1
@@ -103,23 +130,41 @@
 	function inputOrderB(evt) {
 		setOrderB(parseInt(evt.currentTarget.value, 10))
 	}
+
+	function resetInvalidA(evt) {
+		const index = parseInt(evt.currentTarget.getAttribute('data-index'), 10)
+		evt.currentTarget.classList.remove('error')
+		evt.currentTarget.value = a[index]
+	}
 	
 	function inputParamA(evt, scaleAll = false) {
 		const v = parseFloat(evt.currentTarget.value)
 		const index = parseInt(evt.currentTarget.getAttribute('data-index'), 10)
 
-		if(isNaN(v)) {
+		if(isNaN(v) || index == 0 && v == 0) {
 			evt.currentTarget.classList.add('error')
 			return
 		} else {
 			evt.currentTarget.classList.remove('error')
 		}
+
+		const lock = evt.currentTarget.parentNode.querySelector('.lock-check')
 		
+		scaleAll = lock && lock.checked
+
 		if(scaleAll && a[index] !== 0) {
 			const scale = v / a[index]
 
-			a = a.map((old) => old * scale)
-		} else {
+			for (var i = a.length - 1; i >= 0; i--) {
+				const newV = Math.round((a[i] * scale) * 1e2) / 1e2
+
+				if(i!==index) {
+					a[i] = newV
+				}
+			}
+		}
+
+		if(a[index] !== v) {
 			a[index] = v
 		}
 	}
@@ -143,10 +188,18 @@
 			b[index] = v
 		}
 	}
+
+	function isValidParamA(a, index) {
+		return index > 0 || a[index] != 0 || !a.some((x) => x!=0)
+	}
+
+	function isValidParamB(b, index) {
+		return true
+	}
 </script>
 
 <style>
-	:global(.error) {
+	:global(.error), .invalid {
 		outline: 2px solid red;
 	}
 	
@@ -310,7 +363,8 @@
 	}
 
 	.formular {
-		font-family: monospace;height: 7em;overflow: auto;
+		font-family: monospace;height: 5em;overflow: auto;
+		resize: vertical;
 	}
 
 	ul {
@@ -319,6 +373,73 @@
 
 	.system-titel {
 		grid-column: forward-start / backward-end; grid-row: 2;
+	}
+
+	.pill {
+		padding: 0.1em 0.5em;
+		border-radius: 1em;
+		margin: 0 0.2em;
+		cursor: pointer;
+	}
+
+	summary {
+		cursor: pointer;
+	}
+
+	details {
+		max-width: 35em;
+		margin: auto;
+	}
+
+	.caption {
+		text-align: center;
+	}
+
+	.lock-check {
+		display: none;
+	}
+
+	.lock {
+		display: inline-block;
+		overflow: hidden;
+		margin-top: 0.1em;
+		margin-bottom: 0.3em;
+		width: 0.7em;
+		height: 0.7em;
+		background: #f0f0f0;
+		cursor: pointer;
+		user-select: none;
+		vertical-align: top;
+		color: transparent;
+		padding: 0.25em;
+		color: #888;
+		border-radius: 10%;
+	}
+
+	.lock-check:checked + .lock {
+		background: #333;
+		color: #fff;
+	}
+
+
+	.checkbox-hidden {
+		display: none;
+	}
+
+	.checkbox-row {
+		display: flex;
+		gap: 0.2em;
+	}
+
+	.checkbox-label {
+		cursor: pointer;
+		padding: 0.1em 0.5em;
+		border-radius: 6px;
+	}
+
+	.checkbox-hidden:checked + .checkbox-label {
+		color: #fff;
+		background: #579;
 	}
 </style>
 <article>
@@ -329,7 +450,36 @@
 	Signal Transformation Structure
 </h1>
 
-<p style="text-align: center;">Examples: {#each Object.keys(examples) as x}<button on:click={() => loadExample(x)}>{x}</button>{/each}</p>
+<p style="text-align: center;">
+	Examples: 
+	{#each Object.keys(examples) as x}
+	<button class="pill" on:click={() => loadExample(x)}>{x}</button>
+	{/each}
+</p>
+
+<details>
+	<summary>Introduction</summary>
+
+	<p>
+		Below you can see a linear time invariant system. That is a system that takes a time discrete signal as an input (on the left side) and produces an resulting signal as output (on the right side). It does so in a very constrained way: the input signal can only be split, delayed, scaled and added back together. 
+	</p>
+
+	<p>
+		The system is made up of two parts: Feed forward part (on the left side) create a number of copies of the input and delays each of them by one timestep. These delayed copies are then scaled individually and then summeed back together.
+	</p>
+	<p>
+		Then in the Feed back part (on the right side) the previous result is split and delayed again but then <strong>recursively</strong> summed back together with itself. This creates a feedback loop and allowes to scale the signal exponentially.
+	</p>
+	<p>
+		On the left side you can choose from various input signal to see the resulting output on the right side. Below the output signal graph you can see the recursive formular describing the system behaviour. This formular can be transformed into a rational function (a fraction with a polynomial in both the numerator and the denominator).
+	</p>
+	<p>
+		The values for which the polynomials evaluate to zero are called zeros (for the numerator) and poles (for the denominator). The poles and zeroes are an alternative representation for the full system. The poles represent frequencies that amplified indefinitly when feed into the system, or in other words inputs for which the system behaviour is not stable.
+	</p>
+	<p>
+		The poles (x) and zeros (o) are marked in the Pole/Zero plot. For the system to be stable it is required that all poles are located inside the unit circle. That is because all points outside the unit circle represent frequencies with no exponential growth. A system with poles outside the unit circle would amplify even constant or decaying input signals to produce an exponentially growing output signal. A system with poles inside the unit circle would only produce unbounded outputs for unbounded inputs (which are expected to not be given). The area beyong the outer most pole is called the regin of convergence. That is the set of a frequencies for which the system output is limited.
+	</p>
+</details>
 
 <div class="system">
 
@@ -367,6 +517,9 @@
 			<path d="M50,0l-4,-3v6z" fill="#aaa" />
 			<path d="M0,-50l-3,4h6z" fill="#aaa" />
 
+			<text x="5" y="-42" font-size="7" fill="#777">X[n]</text>
+			<text x="47" y="-5" font-size="7" fill="#777" text-anchor="end">n</text>
+
 			{#each input as v,i}
 			<line y1="0" y2="{-v*25}" x1="{(i-input.length/2) * 90/input.length}" x2="{(i-input.length/2) * 90/input.length}" stroke="#0af" vector-effect="non-scaling-stroke" stroke-width="2" />
 			<circle fill="#0af" r="1" cy="{-v*25}" cx="{(i-input.length/2) * 90/input.length}" />
@@ -386,6 +539,8 @@
 			<line y1="-50" y2="50" x1="0" x2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
 			<path d="M50,0l-4,-3v6z" fill="#aaa" />
 			<path d="M0,-50l-3,4h6z" fill="#aaa" />
+			<text x="5" y="-42" font-size="7" fill="#777">Y[n]</text>
+			<text x="47" y="-5" font-size="7" fill="#777" text-anchor="end">n</text>
 
 			{#each output as v,i}
 			<line y1="0" y2="{-v*25}" x1="{(i-output.length/2) * 90/output.length}" x2="{(i-output.length/2) * 90/output.length}" stroke="#0a6" vector-effect="non-scaling-stroke" stroke-width="2" />
@@ -393,9 +548,18 @@
 			{/each}
 		</svg>
 
-		<div class="formular">
-			{outputFormular}
+		<h2>Output Function</h2>
+
+		<div class="checkbox-row">
+			<label><input class="checkbox-hidden" type="radio" bind:group={selectedOutput} value={0} /> <span class="checkbox-label">Time</span></label>
+			<label><input class="checkbox-hidden" type="radio" bind:group={selectedOutput} value={1} /> <span class="checkbox-label">Freq</span></label>
+			<label><input class="checkbox-hidden" type="radio" bind:group={selectedOutput} value={2} /> <span class="checkbox-label">Transfere</span></label>
 		</div>
+
+		<div class="formular">
+			{outputs[selectedOutput]}
+		</div>
+
 		<hr>
 		<h2>Pole/Zero Plot</h2>
 		<svg class="signal-graph" viewBox="-50 -50 100 100">
@@ -404,26 +568,39 @@
 			<path d="M50,0l-4,-3v6z" fill="#aaa" />
 			<path d="M0,-50l-3,4h6z" fill="#aaa" />
 
-			<circle cx="0" cy="0" r="20" stroke="#ddd" fill="none" stroke-dasharray="5 5" />
-			<circle cx="0" cy="0" r="{rocRadiusMin * 20}" stroke="cyan" fill="none" stroke-dasharray="1 1" />
+			<text x="5" y="-42" font-size="7" fill="#777">Im</text>
+			<text x="47" y="-5" font-size="7" fill="#777" text-anchor="end">Re</text>
 
-			{#if roots.length}
-			{#each roots[0] as r, i}
-			<circle cx={r*20} cy={roots[1][i]*20} r="2" fill="none" stroke="blue" vector-effect="non-scaling-stroke"  />
+			<circle cx="0" cy="0" r="20" stroke="#aaa" fill="none" vector-effect="non-scaling-stroke" />
+
+			<path fill-rule="evenodd" d="M-50,-50L50,-50L50,50L-50,50z M{-rocRadiusMin * 20},0a{rocRadiusMin * 20} {rocRadiusMin * 20} 0 1 1 0 1z" fill="lime" fill-opacity="0.1" />
+			<circle cx="0" cy="0" r="{rocRadiusMin * 20}" stroke-width="1" stroke="green" fill="none" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
+
+			{#if zeros.length}
+			{#each zeros[0] as r, i}
+				{#if !isNaN(zeros[0][i])} 
+				<circle cx={r*20} cy={zeros[1][i]*20} r="2" fill="none" stroke="blue" vector-effect="non-scaling-stroke">
+					<title>Root</title>
+				</circle>
+				{/if}
 			{/each}
 			{/if}
 			{#if poles.length}
 			{#each poles[0] as r, i}
-			 <path d="M{svgNumber.format(r*20)}, {svgNumber.format(poles[1][i]*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="red" />
+			 <path d="M{svgNumber.format(r*20)}, {svgNumber.format(poles[1][i]*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="red">
+			 	<title>Pole</title>
+			 </path>
 			{/each}
 			{/if}
 		</svg>
 
-		{#if stable}
-		Stable
-		{:else}
-		Unstable
-		{/if}
+		<div class="caption">
+			{#if stable}
+			Stable
+			{:else}
+			Unstable
+			{/if}
+		</div>
 
 		<div>
 			<h3>Poles</h3>
@@ -437,11 +614,11 @@
 			None
 			{/if}
 
-			<h3>Roots</h3>
-			{#if roots[0]}
+			<h3>Zeros</h3>
+			{#if zeros[0]}
 			<ul >
-				{#each roots[0] as r, i}
-				 <li>{formatter.format(roots[0][i])}{signedFormatter.format(roots[1][i])}i</li>
+				{#each zeros[0] as r, i}
+				 <li>{formatter.format(zeros[0][i])}{signedFormatter.format(zeros[1][i])}i</li>
 				{/each}
 			</ul>
 			{:else}
@@ -456,9 +633,14 @@
 		<div class="stack-box">
 			<Mesh first={i==0} last={i>=a.length-1} />
 			<div class="weight-field">
-				<label for="a_{i}">Gain</label>
-			<input min="-10" max="10" step="0.1" class="weight-input" id="a_{i}" data-index={i} type="number" value={(v)} size="3" on:input={inputParamA} />
-			
+				<label for="a_{i}">Amplify</label>
+				{#if i==0}
+				<input id="lock" class="lock-check" type="checkbox" />
+				<label title="Lock Ratio" for="lock" class="lock">
+					<Link />
+				</label>
+				{/if}
+				<input class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.1" class="weight-input" id="a_{i}" data-index={i} type="number" value={(v)} size="3" on:input={inputParamA} on:blur={resetInvalidA} />
 			</div>
 		</div>
 		{/each}
@@ -472,8 +654,8 @@
 			<Mesh first={false} last={i>=b.length-1} out back />
 			
 			<div class="weight-field">
-			<label for="b_{i}">Gain</label>
-			<input min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={(v)} size="3" on:input={inputParamB} />
+			<label for="b_{i}">Amplify</label>
+			<input class:invalid={!isValidParamB(b,i)} min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={(v)} size="3" on:input={inputParamB} />
 			</div>		
 		</div>
 		{/each}
