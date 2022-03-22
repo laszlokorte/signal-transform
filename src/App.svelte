@@ -24,8 +24,8 @@
 	}
 
 	function loadExample(name) {
-		a = examples[name].a
-		b = examples[name].b
+		a = examples[name].a.slice()
+		b = examples[name].b.slice()
 	}
 
 	let a = [1]
