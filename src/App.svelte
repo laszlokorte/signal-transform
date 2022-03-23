@@ -17,9 +17,17 @@
 			a: [.25,.25],
 			b: [1,-.5]
 		},
+		'High pass': {
+			a: [-2.90, +4.90, -1.90, -0.40, -0.30, -0.20, +0.80],
+			b: [ -1.00, -0.68, -0.28],
+		},
 		'Unstable': {
 			a: [.2,-.3,0.4,-0.1],
 			b: [-1.1,0.2,0.7],
+		},
+		'Invalid': {
+			a: [0,1],
+			b: [],
 		},
 	}
 
@@ -45,6 +53,8 @@
 
 		return durand(arr)
 	}
+
+	$: unsolvable = a[0] == 0 && a.some(v=>v!=0)
 
 	$: zeros = findRoots(a.map(v=>v).reverse())
 	$: poles = findRoots([-1,...b].map((v)=>-v).reverse())
@@ -141,7 +151,7 @@
 		const v = parseFloat(evt.currentTarget.value)
 		const index = parseInt(evt.currentTarget.getAttribute('data-index'), 10)
 
-		if(isNaN(v) || index == 0 && v == 0) {
+		if(isNaN(v)) {
 			evt.currentTarget.classList.add('error')
 			return
 		} else {
@@ -152,7 +162,7 @@
 		
 		scaleAll = lock && lock.checked
 
-		if(scaleAll && a[index] !== 0) {
+		if(scaleAll && a[index] != 0 && v != 0) {
 			const scale = v / a[index]
 
 			for (var i = a.length - 1; i >= 0; i--) {
@@ -190,17 +200,22 @@
 	}
 
 	function isValidParamA(a, index) {
-		return index > 0 || a[index] != 0 || !a.some((x) => x!=0)
+		return typeof a[index] == 'number' && !isNaN(a[index]) && (index > 0 || a[index] != 0 || !a.some((x) => x!=0))
 	}
 
 	function isValidParamB(b, index) {
-		return true
+		return typeof b[index] == 'number' && !isNaN(b[index])
 	}
 </script>
 
 <style>
+	:global(body) {
+		overflow-y: scroll;
+	}
+
 	:global(.error), .invalid {
-		outline: 2px solid red;
+		outline: 2px solid #a00;
+		background: #fee;
 	}
 	
 	dl {
@@ -441,6 +456,13 @@
 		color: #fff;
 		background: #579;
 	}
+
+	.warning {
+		color: #a00;
+		border: 1px solid #a00;
+		padding: 0.5em;
+		background: #fee;
+	}
 </style>
 <article>
 
@@ -562,69 +584,78 @@
 
 		<hr>
 		<h2>Pole/Zero Plot</h2>
-		<svg class="signal-graph" viewBox="-50 -50 100 100">
-			<line x1="-50" x2="50" y1="0" y2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
-			<line y1="-50" y2="50" x1="0" x2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
-			<path d="M50,0l-4,-3v6z" fill="#aaa" />
-			<path d="M0,-50l-3,4h6z" fill="#aaa" />
 
-			<text x="5" y="-42" font-size="7" fill="#777">Im</text>
-			<text x="47" y="-5" font-size="7" fill="#777" text-anchor="end">Re</text>
+		{#if unsolvable}
+			<div class="warning">
+				The Amplificiation a<sub>0</sub> must not be zero. Otherwise the function can not be factored into a pole/zero representation.
+			</div>
+		{:else}
+			<svg class="signal-graph" viewBox="-50 -50 100 100">
+				<line x1="-50" x2="50" y1="0" y2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
+				<line y1="-50" y2="50" x1="0" x2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
+				<path d="M50,0l-4,-3v6z" fill="#aaa" />
+				<path d="M0,-50l-3,4h6z" fill="#aaa" />
 
-			<circle cx="0" cy="0" r="20" stroke="#aaa" fill="none" vector-effect="non-scaling-stroke" />
+				<text x="5" y="-42" font-size="7" fill="#777">Im</text>
+				<text x="47" y="-5" font-size="7" fill="#777" text-anchor="end">Re</text>
 
-			<path fill-rule="evenodd" d="M-50,-50L50,-50L50,50L-50,50z M{-rocRadiusMin * 20},0a{rocRadiusMin * 20} {rocRadiusMin * 20} 0 1 1 0 1z" fill="lime" fill-opacity="0.1" />
-			<circle cx="0" cy="0" r="{rocRadiusMin * 20}" stroke-width="1" stroke="green" fill="none" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
+				<circle cx="0" cy="0" r="20" stroke="#aaa" fill="none" vector-effect="non-scaling-stroke" />
 
-			{#if zeros.length}
-			{#each zeros[0] as r, i}
-				{#if !isNaN(zeros[0][i])} 
-				<circle cx={r*20} cy={zeros[1][i]*20} r="2" fill="none" stroke="blue" vector-effect="non-scaling-stroke">
-					<title>Root</title>
-				</circle>
-				{/if}
-			{/each}
-			{/if}
-			{#if poles.length}
-			{#each poles[0] as r, i}
-			 <path d="M{svgNumber.format(r*20)}, {svgNumber.format(poles[1][i]*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="red">
-			 	<title>Pole</title>
-			 </path>
-			{/each}
-			{/if}
-		</svg>
+				<path fill-rule="evenodd" d="M-50,-50L50,-50L50,50L-50,50z M{-rocRadiusMin * 20},0a{rocRadiusMin * 20} {rocRadiusMin * 20} 0 1 1 0 1z" fill="lime" fill-opacity="0.1" />
+				<circle cx="0" cy="0" r="{rocRadiusMin * 20}" stroke-width="1" stroke="green" fill="none" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
 
-		<div class="caption">
-			{#if stable}
-			Stable
-			{:else}
-			Unstable
-			{/if}
-		</div>
-
-		<div>
-			<h3>Poles</h3>
-			{#if poles[0]}
-			<ul>
-				{#each poles[0] as r, i}
-				 <li>{formatter.format(poles[0][i])}{signedFormatter.format(poles[1][i])}i</li>
-				{/each}
-			</ul>
-			{:else}
-			None
-			{/if}
-
-			<h3>Zeros</h3>
-			{#if zeros[0]}
-			<ul >
+				{#if zeros.length}
 				{#each zeros[0] as r, i}
-				 <li>{formatter.format(zeros[0][i])}{signedFormatter.format(zeros[1][i])}i</li>
+					{#if !isNaN(zeros[0][i])} 
+					<circle cx={r*20} cy={zeros[1][i]*20} r="2" fill="none" stroke="blue" vector-effect="non-scaling-stroke">
+						<title>Root</title>
+					</circle>
+					{/if}
 				{/each}
-			</ul>
-			{:else}
-			None
-			{/if}
-		</div>
+				{/if}
+				{#if poles.length}
+				{#each poles[0] as r, i}
+				 <path d="M{svgNumber.format(r*20)}, {svgNumber.format(poles[1][i]*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="red">
+				 	<title>Pole</title>
+				 </path>
+				{/each}
+				{/if}
+			</svg>
+
+			<div class="caption">
+				{#if stable}
+				Stable
+				{:else}
+				Unstable
+				{/if}
+			</div>
+
+			<div>
+				<h3>Poles</h3>
+				{#if poles[0]}
+				<ul>
+					{#each poles[0] as r, i}
+					 <li>{formatter.format(poles[0][i])}{signedFormatter.format(poles[1][i])}i</li>
+					{/each}
+				</ul>
+				{:else}
+				None
+				{/if}
+
+				<h3>Zeros</h3>
+				{#if zeros[0]}
+				<ul >
+					{#each zeros[0] as r, i}
+					 <li>{formatter.format(zeros[0][i])}{signedFormatter.format(zeros[1][i])}i</li>
+					{/each}
+				</ul>
+				{:else}
+				None
+				{/if}
+			</div>
+		{/if}
+
+		
 	</div>
 
 
