@@ -6,6 +6,13 @@
 	const formatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 	const signedFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2, 'signDisplay': 'always' });
 	const svgNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+
+	function formatComplex(c) {
+		const re = formatter.format(c[0])
+		const im = signedFormatter.format(c[1])
+		return `${re=='-0.00'?'0.00':re}${im=='-0.00'?'+0.00':im}i`
+	}
+
 	const sampleRate = 40
 
 	const examples = {
@@ -34,7 +41,10 @@
 	function loadExample(name) {
 		a = examples[name].a.slice()
 		b = examples[name].b.slice()
+		selectedPoleZero = null
 	}
+
+	let selectedPoleZero = null
 
 	let a = [1]
 	const minOrderA = 0
@@ -51,15 +61,37 @@
 		    arr.shift();            
 		}
 
-		return durand(arr)
+		const roots = durand(arr);
+
+		return roots.length && roots[0].length ? roots[0].map((_,i) => [roots[0][i], roots[1][i]]) : []
+	}
+
+	function compareComplex(a,b) {
+		return Math.sign(Math.atan2(...b) - Math.atan2(...a))
+	}
+
+	function toPoleZero(a,b) {
+		const zeros = findRoots(a.map(v=>v).reverse()).sort(compareComplex)
+		const poles = findRoots([-1,...b].map((v)=>-v).reverse()).sort(compareComplex)
+
+		const polynomeOrder = Math.max(zeros.length, poles.length)
+
+		while(zeros.length < polynomeOrder) {
+			zeros.push([0,0])
+		}
+
+		while(poles.length < polynomeOrder) {
+			poles.push([0,0])
+		}
+
+		return [poles, zeros]
 	}
 
 	$: unsolvable = a[0] == 0 && a.some(v=>v!=0)
 
-	$: zeros = findRoots(a.map(v=>v).reverse())
-	$: poles = findRoots([-1,...b].map((v)=>-v).reverse())
+	$: [poles, zeros] = toPoleZero(a,b)
 
-	$: poleMagnitudesSquares = poles[0] ? poles[0].map((_,i) => poles[0][i]*poles[0][i] + poles[1][i]*poles[1][i]) : []
+	$: poleMagnitudesSquares = poles.map((p) => p[0]*p[0] + p[1]*p[1])
 
 	$: rocRadiusMin = Math.sqrt(Math.max(0, ...poleMagnitudesSquares))
 	$: stable = rocRadiusMin < 1
@@ -125,12 +157,14 @@
 		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA) + 1
 		
 		a = Array(orderA).fill(0).map((z,i) => a[i] || z)
+		selectedPoleZero = null
 	}
 	
 	function setOrderB(o) {
 		const orderB = Math.min(Math.max(o, minOrderB), maxOrderB)
 		
 		b = Array(orderB).fill(0).map((z,i) => b[i] || z)
+		selectedPoleZero = null
 	}
 	
 	function inputOrderA(evt) {
@@ -166,7 +200,7 @@
 			const scale = v / a[index]
 
 			for (var i = a.length - 1; i >= 0; i--) {
-				const newV = Math.round((a[i] * scale) * 1e2) / 1e2
+				const newV = a[i] * scale
 
 				if(i!==index) {
 					a[i] = newV
@@ -463,6 +497,14 @@
 		padding: 0.5em;
 		background: #fee;
 	}
+
+	select {
+		width: 100%;
+		font-size: inherit;
+		font: inherit;
+		padding: 0;
+		accent-color: red;
+	}
 </style>
 <article>
 
@@ -578,9 +620,7 @@
 			<label><input class="checkbox-hidden" type="radio" bind:group={selectedOutput} value={2} /> <span class="checkbox-label">Transfere</span></label>
 		</div>
 
-		<div class="formular">
-			{outputs[selectedOutput]}
-		</div>
+		<textarea readonly class="formular">{outputs[selectedOutput]}</textarea>
 
 		<hr>
 		<h2>Pole/Zero Plot</h2>
@@ -590,7 +630,7 @@
 				The Amplificiation a<sub>0</sub> must not be zero. Otherwise the function can not be factored into a pole/zero representation.
 			</div>
 		{:else}
-			<svg class="signal-graph" viewBox="-50 -50 100 100">
+			<svg class="signal-graph" viewBox="-50 -50 100 100" on:click={()=>{selectedPoleZero = null}}>
 				<line x1="-50" x2="50" y1="0" y2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
 				<line y1="-50" y2="50" x1="0" x2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
 				<path d="M50,0l-4,-3v6z" fill="#aaa" />
@@ -605,17 +645,15 @@
 				<circle cx="0" cy="0" r="{rocRadiusMin * 20}" stroke-width="1" stroke="green" fill="none" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
 
 				{#if zeros.length}
-				{#each zeros[0] as r, i}
-					{#if !isNaN(zeros[0][i])} 
-					<circle cx={r*20} cy={zeros[1][i]*20} r="2" fill="none" stroke="blue" vector-effect="non-scaling-stroke">
+				{#each zeros as [zx,zy], i}
+					<circle cx={zx*20} cy={zy*20} r="2" fill="none" stroke="red" vector-effect="non-scaling-stroke" stroke-width={selectedPoleZero == `z-${i}` ? 3 : 1}>
 						<title>Root</title>
 					</circle>
-					{/if}
 				{/each}
 				{/if}
 				{#if poles.length}
-				{#each poles[0] as r, i}
-				 <path d="M{svgNumber.format(r*20)}, {svgNumber.format(poles[1][i]*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="red">
+				{#each poles as [px,py], i}
+				 <path d="M{svgNumber.format(px*20)}, {svgNumber.format(py*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="blue" stroke-width={selectedPoleZero == `p-${i}` ? 3 : 1}>
 				 	<title>Pole</title>
 				 </path>
 				{/each}
@@ -631,27 +669,23 @@
 			</div>
 
 			<div>
-				<h3>Poles</h3>
-				{#if poles[0]}
+				<h3>Gain</h3>
 				<ul>
-					{#each poles[0] as r, i}
-					 <li>{formatter.format(poles[0][i])}{signedFormatter.format(poles[1][i])}i</li>
-					{/each}
+					<li>{a[0]}</li>
 				</ul>
-				{:else}
-				None
-				{/if}
+				<h3>Poles</h3>
+				<select size="3" bind:value={selectedPoleZero}>
+					{#each poles as p, i}
+					 <option value="p-{i}">{formatComplex(p)}</option>
+					{/each}
+				</select>
 
 				<h3>Zeros</h3>
-				{#if zeros[0]}
-				<ul >
-					{#each zeros[0] as r, i}
-					 <li>{formatter.format(zeros[0][i])}{signedFormatter.format(zeros[1][i])}i</li>
+				<select size="3" bind:value={selectedPoleZero}>
+					{#each zeros as z, i}
+					 <option value="z-{i}">{formatComplex(z)}</option>
 					{/each}
-				</ul>
-				{:else}
-				None
-				{/if}
+				</select>
 			</div>
 		{/if}
 
@@ -671,7 +705,7 @@
 					<Link />
 				</label>
 				{/if}
-				<input class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.1" class="weight-input" id="a_{i}" data-index={i} type="number" value={(v)} size="3" on:input={inputParamA} on:blur={resetInvalidA} />
+				<input class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.01" class="weight-input" id="a_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamA} on:blur={resetInvalidA} />
 			</div>
 		</div>
 		{/each}
@@ -686,7 +720,7 @@
 			
 			<div class="weight-field">
 			<label for="b_{i}">Amplify</label>
-			<input class:invalid={!isValidParamB(b,i)} min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={(v)} size="3" on:input={inputParamB} />
+			<input class:invalid={!isValidParamB(b,i)} min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamB} />
 			</div>		
 		</div>
 		{/each}
