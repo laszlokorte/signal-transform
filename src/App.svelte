@@ -503,7 +503,6 @@
 		font-size: inherit;
 		font: inherit;
 		padding: 0;
-		accent-color: red;
 	}
 </style>
 <article>
@@ -705,7 +704,7 @@
 					<Link />
 				</label>
 				{/if}
-				<input class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.01" class="weight-input" id="a_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamA} on:blur={resetInvalidA} />
+				<input lang="en" class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.01" class="weight-input" id="a_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamA} on:blur={resetInvalidA} />
 			</div>
 		</div>
 		{/each}
@@ -720,7 +719,7 @@
 			
 			<div class="weight-field">
 			<label for="b_{i}">Amplify</label>
-			<input class:invalid={!isValidParamB(b,i)} min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamB} />
+			<input lang="en" class:invalid={!isValidParamB(b,i)} min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamB} />
 			</div>		
 		</div>
 		{/each}
