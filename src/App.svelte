@@ -103,6 +103,7 @@
 		sin: Array(sampleRate).fill(0).map((v,i) => Math.sin(2*Math.PI*i/sampleRate)),
 		cos: Array(sampleRate).fill(0).map((v,i) => Math.cos(2*Math.PI*i/sampleRate)),
 		const: Array(sampleRate).fill(0).map((v,i) => 1),
+		step: Array(sampleRate).fill(0).map((v,i) => i < sampleRate/2 ? 0 : 1),
 	}
 	
 	$: input = inputs[inputName]
@@ -369,6 +370,7 @@
 		border: 1px solid black;
 		background: white;
 		padding: 0.1em 0.3em 0.2em;
+		margin-bottom: 0.2em;
 	}
 
 	.weight-input {
@@ -498,7 +500,7 @@
 		background: #fee;
 	}
 
-	select {
+	select[size] {
 		width: 100%;
 		font-size: inherit;
 		font: inherit;
@@ -552,8 +554,8 @@
 		Feed Forward
 	</legend>
 	<dl>
-		<dt><label for="order">Delay count</label></dt>
-		<dd><input size="4" step="1" min={minOrderA} max={maxOrderA} type="number" value={a.length-1} on:input={inputOrderA} /></dd>
+		<dt><label for="orderA">Delay count</label></dt>
+		<dd><input id="orderA" size="4" step="1" min={minOrderA} max={maxOrderA} type="number" value={a.length-1} on:input={inputOrderA} /></dd>
 		<dd class="full"><input type="range" step="1" min={minOrderA} max={maxOrderA} value={a.length-1} on:input={inputOrderA} /></dd>
 	</dl>
 		
@@ -564,8 +566,8 @@
 		Feed Back
 	</legend>
 	<dl>
-		<dt><label for="order">Delay Count</label></dt>
-		<dd><input size="4" step="1" min={minOrderB} max={maxOrderB} type="number" value={b.length} on:input={inputOrderB} /></dd>
+		<dt><label for="orderB">Delay Count</label></dt>
+		<dd><input id="orderB" size="4" step="1" min={minOrderB} max={maxOrderB} type="number" value={b.length} on:input={inputOrderB} /></dd>
 		<dd class="full"><input type="range" step="1" min={minOrderB} max={maxOrderB} value={b.length} on:input={inputOrderB} /></dd>
 	</dl>
 	</fieldset>
@@ -573,7 +575,7 @@
 	<h2 class="system-titel">System</h2>
 
 	<div class="in-signal">
-		<h2>input signal X</h2>
+		<h2>input signal x</h2>
 		<svg class="signal-graph" viewBox="-50 -50 100 100">
 			<line x1="-50" x2="50" y1="0" y2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
 			<line y1="-50" y2="50" x1="0" x2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
@@ -596,7 +598,7 @@
 	</div>
 
 	<div class="out-signal">
-		<h2>output signal Y</h2>
+		<h2>output signal y</h2>
 		<svg class="signal-graph" viewBox="-50 -50 100 100">
 			<line x1="-50" x2="50" y1="0" y2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
 			<line y1="-50" y2="50" x1="0" x2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />

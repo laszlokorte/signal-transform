@@ -12,6 +12,7 @@ export let out = false;
 		width: 100%;
 		display: block;
 		margin: 0;
+		align-self: stretch;
 	}
 	
 	.hidden {
@@ -19,11 +20,11 @@ export let out = false;
 	}
 </style>
 
-<svg viewBox="-30 0 360 100" class="stack-mesh">
+<svg viewBox="-30 0 360 100" class="stack-mesh" preserveAspectRatio="xMidYMin meet">
 	<path vector-effect="non-scaling-stroke" class:hidden={!debug} d="M159,16C159,14 157,12 154,12L145,12C142,12 140,14 140,16L140,26C140,28 142,31 145,31L154,31C157,31 159,28 159,26L159,16Z" fill="red" />
 	<path vector-effect="non-scaling-stroke" class:hidden={!first} d="M-50,40L330,40" fill="none" stroke="black" stroke-width="1" />
 	<path vector-effect="non-scaling-stroke" class:hidden={first} d="M259,-10L259,40L32,40L32,-10" fill="none" stroke="black" stroke-width="1" />
-	<path vector-effect="non-scaling-stroke" class:hidden={last} d="M259,100L259,40M32,40L32,100" fill="none" stroke="black" stroke-width="1" />
+	<path vector-effect="non-scaling-stroke" class:hidden={last} d="M259,200L259,40M32,40L32,200" fill="none" stroke="black" stroke-width="1" />
 	
 	<path vector-effect="non-scaling-stroke" class:hidden={!out || !first} d="M330,40L322,43L322,37L330,40Z"/>
 	
@@ -32,7 +33,7 @@ export let out = false;
 		<g>
 			<title>Sum Signals</title>
 			<circle class:hidden={last} cx="32" cy="40" r="12" fill="white" stroke="black" stroke-width="1" />
-			<text class:hidden={last} x="32" y="42" text-anchor="middle" dominant-baseline="middle">+</text>
+			<text class:hidden={last} x="32" y="41.5" text-anchor="middle" dominant-baseline="middle" font-size="24">+</text>
 		</g>
 
 		<path vector-effect="non-scaling-stroke" class:hidden={last || first} d="M44,40L52,43L52,37L44,40Z"/>    
@@ -51,7 +52,7 @@ export let out = false;
 	<g class:hidden={!first || out}>
 		<title>Input signal</title>
 		<rect x="-29" y="23" width="40" height="31" fill="white" stroke="black" stroke-width="1" />
-		<text x="-8" y="41" text-anchor="middle" dominant-baseline="middle">X[n]</text>
+		<text x="-8" y="41" text-anchor="middle" dominant-baseline="middle">x[n]</text>
 	</g>
 	
 	<g class:hidden={last || back}>
@@ -63,7 +64,7 @@ export let out = false;
 		<g>
 			<title>Sum Signals</title>
 			<circle  class:hidden={last} cx="259" cy="40" r="12" fill="white" stroke="black" stroke-width="1" />
-			<text class:hidden={last} x="260" y="42" text-anchor="middle" dominant-baseline="middle">+</text>
+			<text class:hidden={last} x="259" y="41.5" text-anchor="middle" dominant-baseline="middle" font-size="24">+</text>
 		</g>
 		<path vector-effect="non-scaling-stroke" class:hidden={last} d="M247,40L239,43L239,37L247,40Z"/>
 		<path vector-effect="non-scaling-stroke" class:hidden={last} d="M259,52L262,59L256,59L259,52Z"/>
