@@ -255,8 +255,8 @@
 	
 	dl {
 		display: grid;
-		grid-template-columns: [full-start] max-content max-content max-content [full-end];
-		align-items: top;
+		grid-template-columns: [full-start] max-content max-content [full-end];
+		align-items: start;
 		gap: 0.2em 1em;
 		margin: 0;
 		justify-content: center;
@@ -289,8 +289,8 @@
 	.system {
 		padding: 1em;
 		display: grid;
-		grid-template-columns: [in-start] 1fr [in-end] 1em [forward-start] 2fr [forward-end backward-start] 2fr [backward-end] 1em [out-start] 1fr [out-end];
-		grid-template-rows: [settings-start] auto [settings-end signal-start logic-start] auto [logic-end signal-end];
+		grid-template-columns: [in-start] minmax(8em, 3fr) [in-end] 1em [forward-start] minmax(14em, 4fr) [forward-end backward-start] minmax(14em, 4fr) [backward-end] 1em [out-start] minmax(8em, 3fr) [out-end];
+		grid-template-rows: [settings-start side-start] auto [settings-end signal-start logic-start] auto [logic-end signal-end side-end];
 		grid-auto-flow: dense;
 		gap: 1em 0;
 	}
@@ -357,7 +357,7 @@
 	
 	.stack-box {
 		display: grid;
-		grid-template-columns: [cover-start] 35% [center-start] 30% [center-end] 35% [cover-end];
+		grid-template-columns: [cover-start] 35fr [center-start] 30fr [center-end] 35fr [cover-end];
 		grid-template-rows: [cover-start center-start] 35% [center-end] 65%  [cover-end];
 	}
 	
@@ -376,13 +376,14 @@
 	.weight-input {
 		width: 100%;
 		margin: 0;
+		min-width: 3em;
 	}
 
 	.signal-graph {
 		display: block;
 		background: #fafafa;
 		margin: 0 0.1em;
-		width: 10em;
+		width: 100%;
 		border: 1px solid #ddd;
 	}
 
@@ -465,6 +466,7 @@
 		padding: 0.25em;
 		color: #888;
 		border-radius: 10%;
+		flex-shrink: 0;
 	}
 
 	.lock-check:checked + .lock {
@@ -505,6 +507,16 @@
 		font-size: inherit;
 		font: inherit;
 		padding: 0;
+	}
+
+	.selected-pole,
+	.selected-zero {
+		stroke-width: 3;
+	}
+
+	.horizontal {
+		display: flex;
+		justify-content: space-between;
 	}
 </style>
 <article>
@@ -631,6 +643,8 @@
 				The Amplificiation a<sub>0</sub> must not be zero. Otherwise the function can not be factored into a pole/zero representation.
 			</div>
 		{:else}
+			<div>
+				<div>
 			<svg class="signal-graph" viewBox="-50 -50 100 100" on:click={()=>{selectedPoleZero = null}}>
 				<line x1="-50" x2="50" y1="0" y2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
 				<line y1="-50" y2="50" x1="0" x2="0" stroke="#aaa" vector-effect="non-scaling-stroke" />
@@ -647,16 +661,28 @@
 
 				{#if zeros.length}
 				{#each zeros as [zx,zy], i}
-					<circle cx={zx*20} cy={zy*20} r="2" fill="none" stroke="red" vector-effect="non-scaling-stroke" stroke-width={selectedPoleZero == `z-${i}` ? 3 : 1}>
+					<circle cx={zx*20} cy={zy*20} r="2" fill="none" stroke="red" vector-effect="non-scaling-stroke" class:selected-zero={selectedPoleZero == `z-${i}`}>
 						<title>Root</title>
+					</circle>
+
+					<circle cx={zx*20} cy={zy*20} r="3" fill="none" stroke="none" vector-effect="non-scaling-stroke" pointer-events="all" on:click={(e) => {
+						e.stopPropagation()
+						selectedPoleZero = `z-${i}` 
+					}}>
 					</circle>
 				{/each}
 				{/if}
 				{#if poles.length}
 				{#each poles as [px,py], i}
-				 <path d="M{svgNumber.format(px*20)}, {svgNumber.format(py*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="blue" stroke-width={selectedPoleZero == `p-${i}` ? 3 : 1}>
+				 <path d="M{svgNumber.format(px*20)}, {svgNumber.format(py*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="blue" class:selected-pole={selectedPoleZero == `p-${i}`}>
 				 	<title>Pole</title>
 				 </path>
+
+				<circle cx={px*20} cy={py*20} r="3" fill="none" stroke="none" vector-effect="non-scaling-stroke" pointer-events="all" on:click={(e) => {
+					e.stopPropagation()
+					selectedPoleZero = `p-${i}` 
+				}}>
+				</circle>
 				{/each}
 				{/if}
 			</svg>
@@ -668,7 +694,10 @@
 				Unstable
 				{/if}
 			</div>
+		</div>
 
+		<div>
+			
 			<div>
 				<h3>Gain</h3>
 				<ul>
@@ -688,6 +717,11 @@
 					{/each}
 				</select>
 			</div>
+
+		</div>
+
+		</div>
+			
 		{/if}
 
 		
@@ -699,13 +733,15 @@
 		<div class="stack-box">
 			<Mesh first={i==0} last={i>=a.length-1} />
 			<div class="weight-field">
-				<label for="a_{i}">Amplify</label>
-				{#if i==0}
-				<input id="lock" class="lock-check" type="checkbox" />
-				<label title="Lock Ratio" for="lock" class="lock">
-					<Link />
-				</label>
-				{/if}
+				<div class="horizontal">
+					<label for="a_{i}">Amplify</label>
+					{#if i==0}
+					<input id="lock" class="lock-check" type="checkbox" />
+					<label title="Lock Ratio" for="lock" class="lock">
+						<Link />
+					</label>
+					{/if}
+				</div>
 				<input lang="en" class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.01" class="weight-input" id="a_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamA} on:blur={resetInvalidA} />
 			</div>
 		</div>
