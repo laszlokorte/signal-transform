@@ -7,10 +7,19 @@
 	const signedFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2, 'signDisplay': 'always' });
 	const svgNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
-	function formatComplex(c) {
-		const re = formatter.format(c[0])
-		const im = signedFormatter.format(c[1])
-		return `${re=='-0.00'?'0.00':re}${im=='-0.00'?'+0.00':im}i`
+	function formatComplex(c, polar) {
+		if(polar) {
+			const phase = signedFormatter.format(Math.atan2(c[1], c[0]))
+			const magnitude = formatter.format(Math.sqrt(c[0]*c[0]+c[1]*c[1]))
+			if(magnitude == '0.00') {
+				return '0.00'
+			}
+			return `${magnitude}⋅e^(i${phase})`
+		} else {
+			const re = formatter.format(c[0])
+			const im = signedFormatter.format(c[1])
+			return `${re=='-0.00'?'0.00':re}${im=='-0.00'?'+0.00':im}i`
+		}
 	}
 
 	const sampleRate = 40
@@ -48,12 +57,12 @@
 
 	let b = [1]
 	const minOrderB = 0
-	const maxOrderB = Math.floor(sampleRate / 2)
+	const maxOrderB = Math.floor(sampleRate / 2) - 1
 	
 	
 	let a = []
 	const minOrderA = 0
-	const maxOrderA = Math.floor(sampleRate / 2) - 1
+	const maxOrderA = Math.floor(sampleRate / 2) 
 
 
 	function findRoots(arr) {
@@ -95,6 +104,107 @@
 
 	$: rocRadiusMin = Math.sqrt(Math.max(0, ...poleMagnitudesSquares))
 	$: stable = rocRadiusMin < 1
+
+	function selectionToPos(p,z,sel) {
+		if(p.length && sel && sel.substr(0,1) == 'p') {
+			const idx = parseInt(sel.substr(2), 10)
+			if(idx < p.length) {
+				return p[idx]
+			}
+		} else if(z.length && sel && sel.substr(0,1) == 'z') {
+			const idx = parseInt(sel.substr(2), 10)
+			if(idx < z.length) {
+				return z[idx]
+			}
+		}
+
+		return null
+	}
+
+
+	let dragState = null
+
+	function dragStart(evt) {
+		const selected = evt.currentTarget.getAttribute('data-polezero')
+		const type = selected.substr(0,1)
+		const idx = parseInt(selected.substr(2))
+		const all = type == 'z' ? zeros : poles
+
+		const self = all[idx]
+		const sign = Math.sign(Math.round(self[1]*1000))
+		const others = all.filter((_,i) => i!==idx)
+		const keep = others.filter(o => Math.sign(Math.round(o[1]*1000))*sign >= 0)
+
+		dragState = {
+			type: type,
+			idx: idx,
+			keep: keep,
+			sign: sign,
+		}
+	}
+
+	function dragUpdate(evt) {
+
+	}
+
+	function dragStop() {
+		dragState = null
+	}
+
+	function complexMul(a,b) {
+		return [a[0]*b[0]-a[1]*b[1], a[0]*b[1]+a[1]*b[0]]
+	}
+
+	function complexAdd(a,b) {
+		return [a[0]+b[0], a[1]+b[1]]
+	}
+
+	function rootsToCoefs(roots) {
+	  const o = [...roots, 0].fill([0,0]);
+	  for (let i = 0; i < 2 ** roots.length; i++) {
+	    let a = [1,0];
+	    let t_index = roots.length;
+	    for (let j = 0; j < roots.length; j++) {
+	      if (i & (1 << j)) {
+	        a = complexMul(a, roots[j]);
+	      } else {
+	        a = complexMul(a, [-1,0]);
+	        t_index--;
+	      }
+	    }
+	    o[t_index] = complexAdd(o[t_index], a);
+	  }
+	  return o;
+	}
+
+	function updatePole(evt) {
+		const selected = evt.currentTarget.getAttribute('data-polezero')
+		const type = selected.substr(0,1)
+		const idx = parseInt(selected.substr(2))
+		const all = type == 'z' ? zeros : poles
+
+		const self = all[idx]
+		const sign = Math.sign(Math.round(self[1]*1000))
+		const others = all.filter((_,i) => i!==idx)
+		const keep = others.filter(o => Math.sign(Math.round(o[1]*1000)) == sign || Math.sign(Math.round(o[1]*1000)) == 0 || (sign==0 && Math.sign(Math.round(o[1]*1000)) > 0))
+
+		const i = parseInt(evt.currentTarget.getAttribute('data-i'), 10)
+
+		const newValue = self.slice()
+		newValue[i] = parseFloat(evt.currentTarget.value)
+
+		const newValues = [...keep, newValue].flatMap(([re,im]) => Math.sign(Math.round(im*1000)) == 0 ? [[re, im]] : [[re,im],[re,-im]]).sort(compareComplex)
+
+		const coefs = rootsToCoefs(newValues).map(z => z[0]);
+		if(type == 'z') {
+			b = coefs.reverse()
+		} else {
+			a = coefs
+		}
+	}
+
+
+	$: selectedPoleZeroPos = selectionToPos(poles, zeros, selectedPoleZero)
 
 
 	let inputName = "impulse"
@@ -153,19 +263,22 @@
 		].join(' ') || 0) + ')'
 
 	let selectedOutput = 0
+
+	let printPolar = false
+
 	$: outputs = [outputFormularTime,
 		outputFormularFreq,
 		outputFormularTransfer]
 
 	function setOrderA(o) {
-		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA) + 1
+		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA)
 		
 		a = Array(orderA).fill(0).map((z,i) => a[i] || z)
 		selectedPoleZero = null
 	}
 	
 	function setOrderB(o) {
-		const orderB = Math.min(Math.max(o, minOrderB), maxOrderB)
+		const orderB = Math.min(Math.max(o, minOrderB), maxOrderB) + 1
 		
 		b = Array(orderB).fill(0).map((z,i) => b[i] || z)
 		selectedPoleZero = null
@@ -485,6 +598,8 @@
 	.checkbox-row {
 		display: flex;
 		gap: 0.2em;
+		justify-content: center;
+		margin: 0.2em 0;
 	}
 
 	.checkbox-label {
@@ -641,6 +756,11 @@
 		<hr>
 		<h2>Pole/Zero Plot</h2>
 
+		<div class="checkbox-row">
+			<label><input class="checkbox-hidden" type="radio" bind:group={printPolar} value={false} /> <span class="checkbox-label">Cartesian</span></label>
+			<label><input class="checkbox-hidden" type="radio" bind:group={printPolar} value={true} /> <span class="checkbox-label">Polar</span></label>
+		</div>
+
 		{#if unsolvable}
 			<div class="warning">
 				The Amplificiation a<sub>0</sub> must not be zero. Otherwise the function can not be factored into a pole/zero representation.
@@ -664,11 +784,11 @@
 
 				{#if zeros.length}
 				{#each zeros as [zx,zy], i}
-					<circle cx={zx*20} cy={zy*20} r="2" fill="none" stroke="red" vector-effect="non-scaling-stroke" class:selected-zero={selectedPoleZero == `z-${i}`}>
+					<circle cx={zx*20} cy={-zy*20} r="2" fill="none" stroke="red" vector-effect="non-scaling-stroke" class:selected-zero={selectedPoleZero == `z-${i}`}>
 						<title>Root</title>
 					</circle>
 
-					<circle cx={zx*20} cy={zy*20} r="3" fill="none" stroke="none" vector-effect="non-scaling-stroke" pointer-events="all" on:click={(e) => {
+					<circle cx={zx*20} cy={-zy*20} r="3" fill="none" stroke="none" vector-effect="non-scaling-stroke" pointer-events="all" on:click={(e) => {
 						e.stopPropagation()
 						selectedPoleZero = `z-${i}` 
 					}}>
@@ -677,16 +797,21 @@
 				{/if}
 				{#if poles.length}
 				{#each poles as [px,py], i}
-				 <path d="M{svgNumber.format(px*20)}, {svgNumber.format(py*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="blue" class:selected-pole={selectedPoleZero == `p-${i}`}>
+				 <path d="M{svgNumber.format(px*20)}, {svgNumber.format(-py*20)}m-2,-2l4,4m-4,0l4,-4" vector-effect="non-scaling-stroke" stroke="blue" class:selected-pole={selectedPoleZero == `p-${i}`}>
 				 	<title>Pole</title>
 				 </path>
 
-				<circle cx={px*20} cy={py*20} r="3" fill="none" stroke="none" vector-effect="non-scaling-stroke" pointer-events="all" on:click={(e) => {
+				<circle cx={px*20} cy={-py*20} r="3" fill="none" stroke="none" vector-effect="non-scaling-stroke" pointer-events="all" on:click={(e) => {
 					e.stopPropagation()
 					selectedPoleZero = `p-${i}` 
 				}}>
 				</circle>
 				{/each}
+				{/if}
+
+				{#if selectedPoleZeroPos}
+					<circle cx={selectedPoleZeroPos[0]*20} cy={-selectedPoleZeroPos[1]*20} r="5" fill="none" stroke="none" data-polezero={selectedPoleZero} on:mousedown={dragStart} vector-effect="non-scaling-stroke" cursor="move" pointer-events="all">
+					</circle>
 				{/if}
 			</svg>
 
@@ -709,18 +834,31 @@
 				<h3>Poles</h3>
 				<select size="3" bind:value={selectedPoleZero}>
 					{#each poles as p, i}
-					 <option value="p-{i}">{formatComplex(p)}</option>
+					 <option value="p-{i}">{formatComplex(p, printPolar)}</option>
 					{/each}
 				</select>
 
 				<h3>Zeros</h3>
 				<select size="3" bind:value={selectedPoleZero}>
 					{#each zeros as z, i}
-					 <option value="z-{i}">{formatComplex(z)}</option>
+					 <option value="z-{i}">{formatComplex(z, printPolar)}</option>
 					{/each}
 				</select>
 			</div>
 
+			{#if false}
+			<div>
+				{#if selectedPoleZero}
+				<h3>Selected</h3>
+				<div style="display: flex;gap: 0.5em; align-items: center;">
+					<input data-i="0" data-polezero={selectedPoleZero} on:input={updatePole} value={formatter.format(selectedPoleZeroPos[0])} type="number" min="-10" max="10" step="0.01" style="width: 1fr; width: 50%; flex-shrink: 1;" />
+					+
+					<input data-i="1" data-polezero={selectedPoleZero} on:input={updatePole} value={formatter.format(selectedPoleZeroPos[1])} type="number" min="-10" max="10" step="0.01" style="width: 1fr; width: 50%; flex-shrink: 1;" />
+					i
+				</div>
+				{/if}
+			</div>
+			{/if}
 		</div>
 
 		</div>
