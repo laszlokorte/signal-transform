@@ -17,43 +17,43 @@
 
 	const examples = {
 		'Identity': {
-			a: [1],
-			b: [],
+			b: [1],
+			a: [],
 		},
 		'Low pass': {
-			a: [.25,.25],
-			b: [1,-.5]
+			b: [.25,.25],
+			a: [1,-.5]
 		},
 		'High pass': {
-			a: [-2.90, +4.90, -1.90, -0.40, -0.30, -0.20, +0.80],
-			b: [ -1.00, -0.68, -0.28],
+			b: [1,-1],
+			a: [],
 		},
 		'Unstable': {
-			a: [.2,-.3,0.4,-0.1],
-			b: [-1.1,0.2,0.7],
+			b: [.2,-.3,0.4,-0.1],
+			a: [-1.1,0.2,0.7],
 		},
 		'Invalid': {
-			a: [0,1],
-			b: [],
+			b: [0,1],
+			a: [],
 		},
 	}
 
 	function loadExample(name) {
-		a = examples[name].a.slice()
 		b = examples[name].b.slice()
+		a = examples[name].a.slice()
 		selectedPoleZero = null
 	}
 
 	let selectedPoleZero = null
 
-	let a = [1]
-	const minOrderA = 0
-	const maxOrderA = Math.floor(sampleRate / 2)
-	
-	
-	let b = []
+	let b = [1]
 	const minOrderB = 0
-	const maxOrderB = Math.floor(sampleRate / 2) - 1
+	const maxOrderB = Math.floor(sampleRate / 2)
+	
+	
+	let a = []
+	const minOrderA = 0
+	const maxOrderA = Math.floor(sampleRate / 2) - 1
 
 
 	function findRoots(arr) {
@@ -70,9 +70,9 @@
 		return Math.sign(Math.atan2(...b) - Math.atan2(...a))
 	}
 
-	function toPoleZero(a,b) {
-		const zeros = findRoots(a.map(v=>v).reverse()).sort(compareComplex)
-		const poles = findRoots([-1,...b].map((v)=>-v).reverse()).sort(compareComplex)
+	function toPoleZero(b,a) {
+		const zeros = findRoots(b.map(v=>v).reverse()).sort(compareComplex)
+		const poles = findRoots([-1,...a].map((v)=>-v).reverse()).sort(compareComplex)
 
 		const polynomeOrder = Math.max(zeros.length, poles.length)
 
@@ -87,9 +87,9 @@
 		return [poles, zeros]
 	}
 
-	$: unsolvable = a[0] == 0 && a.some(v=>v!=0)
+	$: unsolvable = b[0] == 0 && b.some(v=>v!=0)
 
-	$: [poles, zeros] = toPoleZero(a,b)
+	$: [poles, zeros] = toPoleZero(b,a)
 
 	$: poleMagnitudesSquares = poles.map((p) => p[0]*p[0] + p[1]*p[1])
 
@@ -97,54 +97,57 @@
 	$: stable = rocRadiusMin < 1
 
 
-	let inputName = "dirac"
+	let inputName = "impulse"
 	const inputs = {
-		dirac: Array(sampleRate).fill(0).map((v,i) => i==Math.round(sampleRate/2) ? 1 : v),
+		impulse: Array(sampleRate).fill(0).map((v,i) => i==Math.round(sampleRate/2) ? 1 : v),
+		'impulse train': Array(sampleRate).fill(0).map((v,i) => i%Math.round(sampleRate/8)==0 ? 1 : v),
 		sin: Array(sampleRate).fill(0).map((v,i) => Math.sin(2*Math.PI*i/sampleRate)),
 		cos: Array(sampleRate).fill(0).map((v,i) => Math.cos(2*Math.PI*i/sampleRate)),
 		const: Array(sampleRate).fill(0).map((v,i) => 1),
 		step: Array(sampleRate).fill(0).map((v,i) => i < sampleRate/2 ? 0 : 1),
+		relu: Array(sampleRate).fill(0).map((v,i) => i < sampleRate/2 ? 0 : 2*(2*i/sampleRate-1)),
+		triangle: Array(sampleRate).fill(0).map((v,i) => Math.abs(i-sampleRate/2) > sampleRate/4 ? 0 : 0.1*Math.abs(sampleRate/4-Math.abs(i-sampleRate/2))),
 	}
 	
 	$: input = inputs[inputName]
 
-	function getOutputAt(input, a, b, i, cache = []) {
+	function getOutputAt(input, b, a, i, cache = []) {
 		if(i<0) return 0;
 		if(cache[i] === undefined) 
 
-		cache[i] = a.reduce((sum, aa, j) => sum + aa*(input[i-j]||0), 0) +
-			b.reduce((sum,bb,k) => sum + bb * getOutputAt(input, a, b, i-k-1, cache), 0)
+		cache[i] = b.reduce((sum, bb, j) => sum + bb*(input[i-j]||0), 0) +
+			a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache), 0)
 
 		return cache[i]
 	}
 
-	$: output = input.map((_,i) => getOutputAt(input, a, b, i))
+	$: output = input.map((_,i) => getOutputAt(input, b, a, i))
 	$: outputFormularTime = 'y[n] = ' + ([
-			...a
+			...b
 			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)} ⋅ x[n-${i}]` : `${formatter.format(c)} ⋅ x[n]`)
 			.filter((t) => t != false),
-			...b
+			...a
 			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)} ⋅ y[n-${i+1}]` : `${formatter.format(c)} ⋅ y[n-1]`)
 			.filter((t) => t != false)
 		].join(' ') || 0)
 
 	$: outputFormularFreq = 'Y(z) = ' + [([
-			...a
+			...b
 			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}⋅z^(-${i}) ⋅ X(z)` : `${formatter.format(c)} ⋅ X(z)`)
 			.filter((t) => t != false),
 		].join(' ') || 0), ([
-			...b
+			...a
 			.map((c,i) => c==0 ? false : `${(i>0?signedFormatter:formatter).format(c)}⋅z^(-${i+1}) ⋅ Y(z)`)
 			.filter((t) => t != false)
 		].join(' ') || 0)
 	].filter((v,i) => v != 0).join(' + ')
 
 	$: outputFormularTransfer = 'Y(z)/X(z) = (' + ([
-			...a
+			...b
 			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)}⋅z^(-${i})` : `${formatter.format(c)}`)
 			.filter((t) => t != false),
 		].join(' ') || 0)  + ') / (1 - ' + ([
-			...b
+			...a
 			.map((c,i) => c==0 ? false : `${(i>0?signedFormatter:formatter).format(c)}⋅z^(-${i+1})`)
 			.filter((t) => t != false)
 		].join(' ') || 0) + ')'
@@ -176,13 +179,13 @@
 		setOrderB(parseInt(evt.currentTarget.value, 10))
 	}
 
-	function resetInvalidA(evt) {
+	function resetInvalidB(evt) {
 		const index = parseInt(evt.currentTarget.getAttribute('data-index'), 10)
 		evt.currentTarget.classList.remove('error')
-		evt.currentTarget.value = a[index]
+		evt.currentTarget.value = b[index]
 	}
 	
-	function inputParamA(evt, scaleAll = false) {
+	function inputParamB(evt, scaleAll = false) {
 		const v = parseFloat(evt.currentTarget.value)
 		const index = parseInt(evt.currentTarget.getAttribute('data-index'), 10)
 
@@ -197,24 +200,24 @@
 		
 		scaleAll = lock && lock.checked
 
-		if(scaleAll && a[index] != 0 && v != 0) {
-			const scale = v / a[index]
+		if(scaleAll && b[index] != 0 && v != 0) {
+			const scale = v / b[index]
 
-			for (var i = a.length - 1; i >= 0; i--) {
-				const newV = a[i] * scale
+			for (var i = b.length - 1; i >= 0; i--) {
+				const newV = b[i] * scale
 
 				if(i!==index) {
-					a[i] = newV
+					b[i] = newV
 				}
 			}
 		}
 
-		if(a[index] !== v) {
-			a[index] = v
+		if(b[index] !== v) {
+			b[index] = v
 		}
 	}
 	
-	function inputParamB(evt, scaleAll = false) {
+	function inputParamA(evt, scaleAll = false) {
 		const v = parseFloat(evt.currentTarget.value)
 		const index = parseInt(evt.currentTarget.getAttribute('data-index'), 10)
 		
@@ -225,21 +228,21 @@
 			evt.currentTarget.classList.remove('error')
 		}
 		
-		if(scaleAll && b[index] !== 0) {
+		if(scaleAll && a[index] !== 0) {
 			const scale = v / b[index]
 
-			b = b.map((old) => old * scale)
+			a = a.map((old) => old * scale)
 		} else {
-			b[index] = v
+			a[index] = v
 		}
 	}
 
-	function isValidParamA(a, index) {
-		return typeof a[index] == 'number' && !isNaN(a[index]) && (index > 0 || a[index] != 0 || !a.some((x) => x!=0))
+	function isValidParamB(a, index) {
+		return typeof b[index] == 'number' && !isNaN(b[index]) && (index > 0 || b[index] != 0 || !b.some((x) => x!=0))
 	}
 
-	function isValidParamB(b, index) {
-		return typeof b[index] == 'number' && !isNaN(b[index])
+	function isValidParamA(b, index) {
+		return typeof a[index] == 'number' && !isNaN(b[index])
 	}
 </script>
 
@@ -524,7 +527,7 @@
 <a href="https://tools.laszlokorte.de" title="More educational tools">More educational tools</a>
 
 <h1>
-	Signal Transformation Structure
+	Digital Filter
 </h1>
 
 <p style="text-align: center;">
@@ -566,9 +569,9 @@
 		Feed Forward
 	</legend>
 	<dl>
-		<dt><label for="orderA">Delay count</label></dt>
-		<dd><input id="orderA" size="4" step="1" min={minOrderA} max={maxOrderA} type="number" value={a.length-1} on:input={inputOrderA} /></dd>
-		<dd class="full"><input type="range" step="1" min={minOrderA} max={maxOrderA} value={a.length-1} on:input={inputOrderA} /></dd>
+		<dt><label for="orderB">Delay count</label></dt>
+		<dd><input id="orderB" size="4" step="1" min={minOrderB} max={maxOrderB} type="number" value={b.length-1} on:input={inputOrderB} /></dd>
+		<dd class="full"><input type="range" step="1" min={minOrderB} max={maxOrderB} value={b.length-1} on:input={inputOrderB} /></dd>
 	</dl>
 		
 	</fieldset>
@@ -578,9 +581,9 @@
 		Feed Back
 	</legend>
 	<dl>
-		<dt><label for="orderB">Delay Count</label></dt>
-		<dd><input id="orderB" size="4" step="1" min={minOrderB} max={maxOrderB} type="number" value={b.length} on:input={inputOrderB} /></dd>
-		<dd class="full"><input type="range" step="1" min={minOrderB} max={maxOrderB} value={b.length} on:input={inputOrderB} /></dd>
+		<dt><label for="orderA">Delay Count</label></dt>
+		<dd><input id="orderA" size="4" step="1" min={minOrderA} max={maxOrderA} type="number" value={a.length} on:input={inputOrderA} /></dd>
+		<dd class="full"><input type="range" step="1" min={minOrderA} max={maxOrderA} value={a.length} on:input={inputOrderA} /></dd>
 	</dl>
 	</fieldset>
 
@@ -701,7 +704,7 @@
 			<div>
 				<h3>Gain</h3>
 				<ul>
-					<li>{a[0]}</li>
+					<li>{b[0]}</li>
 				</ul>
 				<h3>Poles</h3>
 				<select size="3" bind:value={selectedPoleZero}>
@@ -729,12 +732,12 @@
 
 
 	<div class="feed-forward stack">
-		{#each a as v,i}
+		{#each b as v,i}
 		<div class="stack-box">
-			<Mesh first={i==0} last={i>=a.length-1} />
+			<Mesh first={i==0} last={i>=b.length-1} />
 			<div class="weight-field">
 				<div class="horizontal">
-					<label for="a_{i}">Amplify</label>
+					<label for="b_{i}">Amplify</label>
 					{#if i==0}
 					<input id="lock" class="lock-check" type="checkbox" />
 					<label title="Lock Ratio" for="lock" class="lock">
@@ -742,22 +745,22 @@
 					</label>
 					{/if}
 				</div>
-				<input lang="en" class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.01" class="weight-input" id="a_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamA} on:blur={resetInvalidA} />
+				<input lang="en" class:invalid={!isValidParamB(b,i)} min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamB} on:blur={resetInvalidB} />
 			</div>
 		</div>
 		{/each}
 	</div>
 	<div class="feed-back stack">
 		<div class="stack-box">
-			<Mesh first={true} last="{b.length<1}" back out />
+			<Mesh first={true} last="{a.length<1}" back out />
 		</div>
-		{#each b as v,i}
+		{#each a as v,i}
 		<div class="stack-box">
-			<Mesh first={false} last={i>=b.length-1} out back />
+			<Mesh first={false} last={i>=a.length-1} out back />
 			
 			<div class="weight-field">
-			<label for="b_{i}">Amplify</label>
-			<input lang="en" class:invalid={!isValidParamB(b,i)} min="-10" max="10" step="0.01" class="weight-input" id="b_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamB} />
+			<label for="a_{i}">Amplify</label>
+			<input lang="en" class:invalid={!isValidParamA(a,i)} min="-10" max="10" step="0.01" class="weight-input" id="a_{i}" data-index={i} type="number" value={formatter.format(v)} size="3" on:input={inputParamA} />
 			</div>		
 		</div>
 		{/each}

@@ -49,6 +49,8 @@ export let out = false;
 		
 	<g class:hidden={last || !back}>
 		<title>Delay by one sample</title>
+		<path vector-effect="non-scaling-stroke" class:hidden={last} d="M259,67L264,60L254,60L259,67Z"/>
+
 		<rect vector-effect="non-scaling-stroke" x="243" y="68" width="31" height="31" fill="white" stroke="black" stroke-width="1" 
 		shape-rendering="optimizeSpeed"
  />
@@ -64,6 +66,8 @@ export let out = false;
 	
 	<g class:hidden={last || back}>
 		<title>Delay by one sample</title>
+		<path vector-effect="non-scaling-stroke" class:hidden={last} d="M32,65L27,58L37,58L32,65Z"/>
+
 		<rect vector-effect="non-scaling-stroke" x="15" y="66" width="31" height="31" fill="white" stroke="black" stroke-width="1" shape-rendering="optimizeSpeed"
  />
 		<text x="32" y="84" text-anchor="middle" dominant-baseline="middle">z<tspan dy ="-7" font-size="12">-1</tspan></text>
