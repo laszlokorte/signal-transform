@@ -68,7 +68,7 @@
 	const maxOrderA = Math.floor(sampleRate / 2) 
 
 	let gain = 1
-	let zeros = [[0,0]]
+	let zeros = []
 	let poles = []
 
 	let pzSvg = null
