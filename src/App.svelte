@@ -183,11 +183,15 @@
 		if(type == 'z') {
 			b = coefs.map(k => k*Math.abs(b[0])*Math.sign(coefs[0]))
 			selectedPoleZero = `z-${newIdx}`
+			const extraPoles = Array(Math.max(0, newValues.length - poles.length)).fill([0,0])
 			zeros = newValues
+			poles = [...poles, ...extraPoles]
 		} else {
-			a = coefs.slice(1).map(k => k*Math.sign(a[0])*Math.sign(coefs[1]))
+			a = coefs.slice(1).map(k => -k/coefs[0])
 			selectedPoleZero = `p-${newIdx}`
+			const extraZeros = Array(Math.max(0, newValues.length - zeros.length)).fill([0,0])
 			poles = newValues
+			zeros = [...zeros, ...extraZeros]
 		}
 	}
 
@@ -251,11 +255,15 @@
 		if(type == 'z') {
 			b = coefs.map(k => k*Math.abs(b[0])*Math.sign(coefs[0]))
 			selectedPoleZero = `z-${newIdx}`
+			const extraPoles = Array(Math.max(0, newValues.length - poles.length)).fill([0,0])
 			zeros = newValues
+			poles = [...poles, ...extraPoles]
 		} else {
-			a = coefs.slice(1).map(k => k*Math.sign(a[0])*Math.sign(coefs[1]))
+			a = coefs.slice(1).map(k => -k/coefs[0])
 			selectedPoleZero = `p-${newIdx}`
+			const extraZeros = Array(Math.max(0, newValues.length - zeros.length)).fill([0,0])
 			poles = newValues
+			zeros = [...zeros, ...extraZeros]
 		}
 	}
 
