@@ -338,6 +338,9 @@
 		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA)
 		
 		a = Array(orderA).fill(0).map((z,i) => a[i] || z)
+		const [p,z] = toPoleZero(b,a)
+		poles = p
+		zeros = z
 		selectedPoleZero = null
 	}
 	
