@@ -1,9 +1,12 @@
 <script> 
 export let back = false;
 export let out = false;
- export let first = false;
- export let last = false;
- export let debug = false;
+export let first = false;
+export let last = false;
+export let debug = false;
+export let delay = 1;
+
+const delayFormatter = new Intl.NumberFormat('en-US', {'signDisplay': 'always'});
 </script>
 
 <style>
@@ -54,7 +57,7 @@ export let out = false;
 		<rect vector-effect="non-scaling-stroke" x="243" y="68" width="31" height="31" fill="white" stroke="black" stroke-width="1" 
 		shape-rendering="optimizeSpeed"
  />
-		<text x="261" y="86" text-anchor="middle" dominant-baseline="middle">z<tspan dy ="-7" font-size="12">-1</tspan></text>
+		<text x="261" y="86" text-anchor="middle" dominant-baseline="middle">z<tspan dy ="-7" font-size="12">{delayFormatter.format(-delay)}</tspan></text>
 	</g>
 	
 	<g class:hidden={!first || out}>
@@ -70,7 +73,7 @@ export let out = false;
 
 		<rect vector-effect="non-scaling-stroke" x="15" y="66" width="31" height="31" fill="white" stroke="black" stroke-width="1" shape-rendering="optimizeSpeed"
  />
-		<text x="32" y="84" text-anchor="middle" dominant-baseline="middle">z<tspan dy ="-7" font-size="12">-1</tspan></text>
+		<text x="32" y="84" text-anchor="middle" dominant-baseline="middle">z<tspan dy ="-7" font-size="12">{delayFormatter.format(-delay)}</tspan></text>
 	</g>
 	<g class:hidden={back}>
 		<g>

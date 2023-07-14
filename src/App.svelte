@@ -28,22 +28,27 @@
 		'Identity': {
 			b: [1],
 			a: [],
+			causal: true,
 		},
 		'Low pass': {
 			b: [.25,.25],
-			a: [1,-.5]
+			a: [1,-.5],
+			causal: true,
 		},
 		'High pass': {
 			b: [1,-1],
 			a: [],
+			causal: true,
 		},
 		'Unstable': {
 			b: [.2,-.3,0.4,-0.1],
 			a: [-1.1,0.2,0.7],
+			causal: true,
 		},
 		'Invalid': {
 			b: [0,1],
 			a: [],
+			causal: true,
 		},
 	}
 
@@ -53,10 +58,13 @@
 		const [p,z] = toPoleZero(b,a)
 		poles = p
 		zeros = z
+		causal = !!examples[name].causal
 		selectedPoleZero = null
 	}
 
 	let selectedPoleZero = null
+
+	let causal = true
 
 	let b = [1]
 	const minOrderB = 0
@@ -172,7 +180,10 @@
 		}
 
 		const self = all[idx]
-		const newValue = [pos.x/20,pos.y/-20]
+		const newValue = [
+			Math.max(-2.5, Math.min(2.5, pos.x/20)), 
+			Math.max(-2.5, Math.min(2.5, Math.abs(sign) * pos.y/-20))]
+
 
 		const newValues = [...keep, newValue].flatMap(([re,im]) => Math.sign(Math.round(im*1000)) == 0 ? [[re, 0]] : [[re,-im], [re,im]])
 
@@ -181,17 +192,23 @@
 		const newIdx = newValues.length - 1
 
 		if(type == 'z') {
-			b = coefs.map(k => k*Math.abs(b[0])*Math.sign(coefs[0]))
-			selectedPoleZero = `z-${newIdx}`
-			const extraPoles = Array(Math.max(0, newValues.length - poles.length)).fill([0,0])
-			zeros = newValues
-			poles = [...poles, ...extraPoles]
+			if(newValues.length == zeros.length) {
+				b = coefs.map(k => k*Math.abs(b[0])*Math.sign(coefs[0]))
+				selectedPoleZero = `z-${newIdx}`
+				const extraPoles = Array(Math.max(0, newValues.length - poles.length)).fill([0,0])
+				
+				zeros = newValues
+				poles = [...poles, ...extraPoles]
+			}
 		} else {
-			a = coefs.slice(1).map(k => -k/coefs[0])
-			selectedPoleZero = `p-${newIdx}`
-			const extraZeros = Array(Math.max(0, newValues.length - zeros.length)).fill([0,0])
-			poles = newValues
-			zeros = [...zeros, ...extraZeros]
+			if(newValues.length == poles.length) {
+				a = coefs.slice(1).map(k => -k/coefs[0])
+				selectedPoleZero = `p-${newIdx}`
+				const extraZeros = Array(Math.max(0, newValues.length - zeros.length)).fill([0,0])
+			
+				poles = newValues
+				zeros = [...zeros, ...extraZeros]
+			}
 		}
 	}
 
@@ -275,8 +292,8 @@
 	const inputs = {
 		impulse: Array(sampleRate).fill(0).map((v,i) => i==Math.round(sampleRate/2) ? 1 : v),
 		'impulse train': Array(sampleRate).fill(0).map((v,i) => i%Math.round(sampleRate/8)==0 ? 1 : v),
-		sin: Array(sampleRate).fill(0).map((v,i) => Math.sin(2*Math.PI*i/sampleRate)),
-		cos: Array(sampleRate).fill(0).map((v,i) => Math.cos(2*Math.PI*i/sampleRate)),
+		sin: Array(sampleRate).fill(0).map((v,i) => Math.sin(2*Math.PI*(i/sampleRate+0.5))),
+		cos: Array(sampleRate).fill(0).map((v,i) => Math.cos(2*Math.PI*(i/sampleRate+0.5))),
 		const: Array(sampleRate).fill(0).map((v,i) => 1),
 		step: Array(sampleRate).fill(0).map((v,i) => i < sampleRate/2 ? 0 : 1),
 		relu: Array(sampleRate).fill(0).map((v,i) => i < sampleRate/2 ? 0 : 2*(2*i/sampleRate-1)),
@@ -285,17 +302,48 @@
 	
 	$: input = inputs[inputName]
 
-	function getOutputAt(input, b, a, i, cache = []) {
+	function getOutputAt(input, b, a, i, cache = [], causality = false) {
 		if(i<0) return 0;
 		if(cache[i] === undefined) 
 
 		cache[i] = b.reduce((sum, bb, j) => sum + bb*(input[i-j]||0), 0) +
-			a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache), 0)
+			a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache, causality), 0)
 
 		return cache[i]
 	}
 
-	$: output = input.map((_,i) => getOutputAt(input, b, a, i))
+	function getImpulseResponseAt(b, a, i, cache = [], causality = false) {
+		if(causality) {
+			if(i<0) return 0;
+			if(cache[i] === undefined) {
+				cache[i] = b.reduce((sum, bb, j) => sum + bb*(i==j), 0) +
+				a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache, causality), 0)
+			}
+
+			return cache[i]
+		} else {
+			if(i<0) return 0;
+			if(cache[i] === undefined) {
+				cache[i] = b.reduce((sum, bb, j) => sum + bb*(i==j), 0) +
+				a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache, causality), 0)
+			}
+
+			return cache[i]
+		}
+	}
+
+	function computeImpulseResponse(b, a, cache, causal) {
+		const result = Array(sampleRate/2).fill(0).map((_,i) => getImpulseResponseAt(b, a, i, cache, causal))
+
+		if(causal) {
+			return [...Array(sampleRate/2).fill(0), ...result]
+		} else {
+			return [...result.reverse(), ...Array(sampleRate/2).fill(0)]
+		}
+	}
+
+	$: impulseResponse = computeImpulseResponse(b, a, [], causal)
+	$: output = input.map((_,i) => getOutputAt(input, b, a, i, [], causal))
 	$: outputFormularTime = 'y[n] = ' + ([
 			...b
 			.map((c,i) => c==0 ? false : i > 0 ? `${signedFormatter.format(c)} ⋅ x[n-${i}]` : `${formatter.format(c)} ⋅ x[n]`)
@@ -437,6 +485,8 @@
 	function isValidParamA(b, index) {
 		return typeof a[index] == 'number' && !isNaN(b[index])
 	}
+
+	$: document.body.classList[dragState!=null ? 'add' : 'remove']('dragging');
 </script>
 
 <svelte:window on:mousemove={dragUpdate} on:mouseup|capture={dragStop} />
@@ -450,6 +500,10 @@
 	:global(.error), .invalid {
 		outline: 2px solid #a00;
 		background: #fee;
+	}
+
+	:global(body.dragging) {
+		cursor: move;
 	}
 	
 	dl {
@@ -488,10 +542,19 @@
 	.system {
 		padding: 1em;
 		display: grid;
-		grid-template-columns: [in-start] minmax(8em, 3fr) [in-end] 1em [forward-start] minmax(14em, 4fr) [forward-end backward-start] minmax(14em, 4fr) [backward-end] 1em [out-start] minmax(8em, 3fr) [out-end];
-		grid-template-rows: [settings-start side-start] auto [settings-end signal-start logic-start] auto [logic-end signal-end side-end];
+		grid-template-columns: [in-start] minmax(8em, 3fr) [in-end] 1em [forward-start causality-start] minmax(14em, 4fr) [forward-end backward-start] minmax(14em, 4fr) [backward-end causality-end] 1em [out-start] minmax(8em, 3fr) [out-end];
+		grid-template-rows: [causality-start] auto [causality-end settings-start side-start] auto [settings-end signal-start logic-start] auto [logic-end signal-end side-end];
 		grid-auto-flow: dense;
 		gap: 1em 0;
+	}
+	
+	.causal-settings {
+		grid-column: causality;
+		grid-row: causality;
+		padding: 0 1em;
+		align-self: center;
+		display: flex;
+		gap: 1em;
 	}
 	
 	.feed-forward-settings {
@@ -623,7 +686,8 @@
 	}
 
 	.system-titel {
-		grid-column: forward-start / backward-end; grid-row: 2;
+		grid-column: forward-start / backward-end; 
+		grid-row: logic-start;
 	}
 
 	.pill {
@@ -761,7 +825,10 @@
 
 
 <div class="system">
-
+	<div class="causal-settings">
+		<label><input type="radio" value={true} bind:group={causal}> Causal</label>
+		<label><input type="radio" value={false} bind:group={causal}> Anti-Causal</label>
+	</div>
 
 	<fieldset class="feed-forward-settings">
 	<legend>
@@ -821,7 +888,7 @@
 			<text x="5" y="-42" font-size="7" fill="#777">Y[n]</text>
 			<text x="47" y="-5" font-size="7" fill="#777" text-anchor="end">n</text>
 
-			{#each output as v,i}
+			{#each impulseResponse as v,i}
 			<line y1="0" y2="{-v*25}" x1="{(i-output.length/2) * 90/output.length}" x2="{(i-output.length/2) * 90/output.length}" stroke="#0a6" vector-effect="non-scaling-stroke" stroke-width="2" />
 			<circle fill="#0a6" r="1" cy="{-v*25}" cx="{(i-output.length/2) * 90/output.length}" />
 			{/each}
@@ -956,9 +1023,14 @@
 
 
 	<div class="feed-forward stack">
+		{#if !causal}
+		<div class="stack-box">
+			<Mesh delay={causal ? 1 : -1} first={true} last="{b.length<1}" />
+		</div>
+		{/if}
 		{#each b as v,i}
 		<div class="stack-box">
-			<Mesh first={i==0} last={i>=b.length-1} />
+			<Mesh delay={causal ? 1 : -1} first={i==0 && causal} last={i>=b.length-1} />
 			<div class="weight-field">
 				<div class="horizontal">
 					<label for="b_{i}">Amplify</label>
@@ -976,11 +1048,11 @@
 	</div>
 	<div class="feed-back stack">
 		<div class="stack-box">
-			<Mesh first={true} last="{a.length<1}" back out />
+			<Mesh delay={causal ? 1 : -1} first={true} last="{a.length<1}" back out />
 		</div>
 		{#each a as v,i}
 		<div class="stack-box">
-			<Mesh first={false} last={i>=a.length-1} out back />
+			<Mesh delay={causal ? 1 : -1} first={false} last={i>=a.length-1} out back />
 			
 			<div class="weight-field">
 			<label for="a_{i}">Amplify</label>
