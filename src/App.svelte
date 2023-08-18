@@ -119,7 +119,8 @@
 	$: poleMagnitudesSquares = poles.map((p) => p[0]*p[0] + p[1]*p[1])
 
 	$: rocRadiusMin = Math.sqrt(Math.max(0, ...poleMagnitudesSquares))
-	$: stable = rocRadiusMin < 1
+	$: rocRadiusMax = Math.sqrt(Math.min(9999, ...poleMagnitudesSquares))
+	$: stable = causal ? rocRadiusMin < 1 : rocRadiusMax > 1
 
 	function selectionToPos(p,z,sel) {
 		if(p.length && sel && sel.substr(0,1) == 'p') {
@@ -303,13 +304,20 @@
 	$: input = inputs[inputName]
 
 	function getOutputAt(input, b, a, i, cache = [], causality = false) {
-		if(i<0) return 0;
-		if(cache[i] === undefined) 
+		if(causality) {
+			if(i<0) return 0;
+			if(cache[i] === undefined) 
+				cache[i] = b.reduce((sum, bb, j) => sum + bb*(input[i-j]||0), 0) +
+				a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache, causality), 0)
 
-		cache[i] = b.reduce((sum, bb, j) => sum + bb*(input[i-j]||0), 0) +
-			a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache, causality), 0)
-
-		return cache[i]
+			return cache[i]
+		} else {
+			if(i>=input.length) return 0;
+			if(cache[i] === undefined) 
+				cache[i] = b.reduce((sum, bb, j) => sum + bb*(input[i+j+1]||0), 0) +
+				a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i+k+1, cache, causality), 0)
+			return cache[i]
+		}
 	}
 
 	function getImpulseResponseAt(b, a, i, cache = [], causality = false) {
@@ -322,7 +330,7 @@
 
 			return cache[i]
 		} else {
-			if(i<0) return 0;
+			if(i>=0) return 0;
 			if(cache[i] === undefined) {
 				cache[i] = b.reduce((sum, bb, j) => sum + bb*(i==j), 0) +
 				a.reduce((sum,aa,k) => sum + aa * getOutputAt(input, b, a, i-k-1, cache, causality), 0)
@@ -888,7 +896,7 @@
 			<text x="5" y="-42" font-size="7" fill="#777">Y[n]</text>
 			<text x="47" y="-5" font-size="7" fill="#777" text-anchor="end">n</text>
 
-			{#each impulseResponse as v,i}
+			{#each output as v,i}
 			<line y1="0" y2="{-v*25}" x1="{(i-output.length/2) * 90/output.length}" x2="{(i-output.length/2) * 90/output.length}" stroke="#0a6" vector-effect="non-scaling-stroke" stroke-width="2" />
 			<circle fill="#0a6" r="1" cy="{-v*25}" cx="{(i-output.length/2) * 90/output.length}" />
 			{/each}
@@ -930,8 +938,13 @@
 
 				<circle cx="0" cy="0" r="20" stroke="#aaa" fill="none" vector-effect="non-scaling-stroke" />
 
+				{#if causal}
 				<path fill-rule="evenodd" d="M-50,-50L50,-50L50,50L-50,50z M{-rocRadiusMin * 20},0a{rocRadiusMin * 20} {rocRadiusMin * 20} 0 1 1 0 1z" fill="lime" fill-opacity="0.1" />
-				<circle cx="0" cy="0" r="{rocRadiusMin * 20}" stroke-width="1" stroke="green" fill="none" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
+				{:else}
+				<circle cx="0" cy="0" r="{(causal ? rocRadiusMin : rocRadiusMax) * 20}" fill-opacity="0.1" fill="lime" />
+				{/if}
+				
+				<circle cx="0" cy="0" r="{(causal ? rocRadiusMin : rocRadiusMax) * 20}" stroke-width="1" stroke="green" fill="none" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
 
 				{#if zeros.length}
 				{#each zeros as [zx,zy], i}
