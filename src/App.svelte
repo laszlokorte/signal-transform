@@ -62,7 +62,7 @@
 	function loadExample(name) {
 		b = examples[name].b.slice();
 		a = examples[name].a.slice();
-		const [p, z] = toPoleZero(b, a);
+		const [p, z] = toPoleZero(b, a, examples[name].causal);
 		poles = p;
 		zeros = z;
 		causal = !!examples[name].causal;
@@ -88,7 +88,8 @@
 	let pzSvg = null;
 	$: svgPoint = pzSvg && pzSvg.createSVGPoint();
 
-	function findRoots(arr) {
+	function findRoots(arrO) {
+		const arr = arrO.map((x) => x);
 		while (arr[0] == 0) {
 			arr.shift();
 		}
@@ -120,18 +121,22 @@
 		);
 	}
 
-	function toPoleZero(b, a) {
-		const zeros = findRoots(b.map((v) => v).reverse());
-		const poles = findRoots([-1, ...a].map((v) => -v).reverse());
+	function toPoleZero(b, a, causal) {
+		const zeros = findRoots(causal ? b.map((v) => v).reverse() : b);
+		const poles = findRoots(
+			causal
+				? [-1, ...a].map((v) => -v).reverse()
+				: [-1, ...a].map((v) => -v),
+		);
 
 		const polynomeOrder = Math.max(zeros.length, poles.length);
 
 		while (zeros.length < polynomeOrder) {
-			zeros.push([0, 0]);
+			zeros.push(causal ? [0, 0] : [Infinity, Infinity]);
 		}
 
 		while (poles.length < polynomeOrder) {
-			poles.push([0, 0]);
+			poles.push(causal ? [0, 0] : [Infinity, Infinity]);
 		}
 
 		return [poles, zeros];
@@ -239,22 +244,30 @@
 
 		if (type == "z") {
 			if (newValues.length == zeros.length) {
-				b = coefs.map((k) => k * Math.abs(b[0]) * Math.sign(coefs[0]));
+				b = causal
+					? coefs.map((k) => k * Math.abs(b[0]) * Math.sign(coefs[0]))
+					: coefs.reverse();
 				selectedPoleZero = `z-${newIdx}`;
 				const extraPoles = Array(
 					Math.max(0, newValues.length - poles.length),
-				).fill([0, 0]);
+				).fill(causal ? [0, 0] : [Infinity, Infinity]);
 
 				zeros = newValues;
 				poles = [...poles, ...extraPoles];
 			}
 		} else {
 			if (newValues.length == poles.length) {
-				a = coefs.slice(1).map((k) => -k / coefs[0]);
+				a = causal
+					? coefs.slice(1).map((k) => -k / coefs[0])
+					: coefs
+							.slice(1)
+							.map((k) => coefs[0] / -k)
+							.reverse();
+
 				selectedPoleZero = `p-${newIdx}`;
 				const extraZeros = Array(
 					Math.max(0, newValues.length - zeros.length),
-				).fill([0, 0]);
+				).fill(causal ? [0, 0] : [Infinity, Infinity]);
 
 				poles = newValues;
 				zeros = [...zeros, ...extraZeros];
@@ -520,18 +533,22 @@
 				.map((c, i) =>
 					c == 0
 						? false
-						: i > 0
-							? `${signedFormatter.format(c)} ⋅ x[n-${i}]`
-							: `${formatter.format(c)} ⋅ x[n]`,
+						: causal
+							? i > 0
+								? `${signedFormatter.format(c)} ⋅ x[n-${i}]`
+								: `${formatter.format(c)} ⋅ x[n]`
+							: `${(i > 0 ? signedFormatter : formatter).format(c)} ⋅ x[n+${i + 1}]`,
 				)
 				.filter((t) => t != false),
 			...a
 				.map((c, i) =>
 					c == 0
 						? false
-						: i > 0
-							? `${signedFormatter.format(c)} ⋅ y[n-${i + 1}]`
-							: `${formatter.format(c)} ⋅ y[n-1]`,
+						: causal
+							? i > 0
+								? `${signedFormatter.format(c)} ⋅ y[n-${i + 1}]`
+								: `${formatter.format(c)} ⋅ y[n-1]`
+							: `${(i > 0 ? signedFormatter : formatter).format(c)} ⋅ y[n+${i + 1}]`,
 				)
 				.filter((t) => t != false),
 		].join(" + ") || 0);
@@ -544,9 +561,13 @@
 					.map((c, i) =>
 						c == 0
 							? false
-							: i > 0
-								? `${signedFormatter.format(c)}⋅z^(-${i}) ⋅ X(z)`
-								: `${formatter.format(c)} ⋅ X(z)`,
+							: causal
+								? i > 0
+									? `${signedFormatter.format(c)}⋅z^(-${i}) ⋅ X(z)`
+									: `${formatter.format(c)} ⋅ X(z)`
+								: i > 0
+									? `${signedFormatter.format(c)}⋅z^(${i + 1}) ⋅ X(z)`
+									: `${formatter.format(c)}⋅z^${i + 1} ⋅ X(z)`,
 					)
 					.filter((t) => t != false),
 			].join(" ") || 0,
@@ -555,7 +576,9 @@
 					.map((c, i) =>
 						c == 0
 							? false
-							: `${(i > 0 ? signedFormatter : formatter).format(c)}⋅z^(-${i + 1}) ⋅ Y(z)`,
+							: causal
+								? `${(i > 0 ? signedFormatter : formatter).format(c)}⋅z^(-${i + 1}) ⋅ Y(z)`
+								: `${(i > 0 ? signedFormatter : formatter).format(c)}⋅z^${i + 1} ⋅ Y(z)`,
 					)
 					.filter((t) => t != false),
 			].join(" ") || 0,
@@ -570,22 +593,30 @@
 				.map((c, i) =>
 					c == 0
 						? false
-						: i > 0
-							? `${signedFormatter.format(c)}⋅z^(-${i})`
-							: `${formatter.format(c)}`,
+						: causal
+							? i > 0
+								? `${signedFormatter.format(c)}⋅z^(-${i})`
+								: `${formatter.format(c)}`
+							: i > 0
+								? `${signedFormatter.format(c)}⋅z^${i + 1}`
+								: `${formatter.format(c)}⋅z^${i + 1}`,
 				)
 				.filter((t) => t != false),
 		].join(" ") || 0) +
-		") / (1 - " +
-		([
-			...a
-				.map((c, i) =>
-					c == 0
-						? false
-						: `${(i > 0 ? signedFormatter : formatter).format(-c)}⋅z^(-${i + 1})`,
-				)
-				.filter((t) => t != false),
-		].join(" ") || 0) +
+		") / (1" +
+		(
+			[
+				...a
+					.map((c, i) =>
+						c == 0
+							? false
+							: causal
+								? `${signedFormatter.format(-c)}⋅z^(-${i + 1})`
+								: `${signedFormatter.format(-c)}⋅z^${i + 1}`,
+					)
+					.filter((t) => t != false),
+			].join(" ") || ""
+		).trim() +
 		")";
 
 	let selectedOutput = 0;
@@ -598,13 +629,20 @@
 		outputFormularTransfer,
 	];
 
+	function updateCausality() {
+		const [p, z] = toPoleZero(b, a, causal);
+		poles = p;
+		zeros = z;
+		selectedPoleZero = null;
+	}
+
 	function setOrderA(o) {
 		const orderA = Math.min(Math.max(o, minOrderA), maxOrderA);
 
 		a = Array(orderA)
 			.fill(0)
 			.map((z, i) => a[i] || z);
-		const [p, z] = toPoleZero(b, a);
+		const [p, z] = toPoleZero(b, a, causal);
 		poles = p;
 		zeros = z;
 		selectedPoleZero = null;
@@ -616,7 +654,7 @@
 		b = Array(orderB)
 			.fill(0)
 			.map((z, i) => b[i] || z);
-		const [p, z] = toPoleZero(b, a);
+		const [p, z] = toPoleZero(b, a, causal);
 		poles = p;
 		zeros = z;
 		selectedPoleZero = null;
@@ -673,7 +711,7 @@
 			b[index] = v;
 		}
 
-		const [p, z] = toPoleZero(b, a);
+		const [p, z] = toPoleZero(b, a, causal);
 		poles = p;
 		zeros = z;
 		selectedPoleZero = null;
@@ -701,7 +739,7 @@
 			a[index] = v;
 		}
 
-		const [p, z] = toPoleZero(b, a);
+		const [p, z] = toPoleZero(b, a, causal);
 		poles = p;
 		zeros = z;
 		selectedPoleZero = null;
@@ -794,10 +832,20 @@
 	<div class="system">
 		<div class="causal-settings">
 			<label
-				><input type="radio" value={true} bind:group={causal} /> Causal</label
+				><input
+					type="radio"
+					value={true}
+					bind:group={causal}
+					on:change={updateCausality}
+				/> Causal</label
 			>
 			<label
-				><input type="radio" value={false} bind:group={causal} /> Anti-Causal</label
+				><input
+					type="radio"
+					value={false}
+					bind:group={causal}
+					on:change={updateCausality}
+				/> Anti-Causal</label
 			>
 		</div>
 
@@ -1101,88 +1149,94 @@
 
 							{#if zeros.length}
 								{#each zeros as [zx, zy], i}
-									<circle
-										cx={zx * 20}
-										cy={-zy * 20}
-										r="2"
-										fill="none"
-										stroke="red"
-										vector-effect="non-scaling-stroke"
-										class:selected-zero={selectedPoleZero ==
-											`z-${i}`}
-									>
-										<title>Root</title>
-									</circle>
+									{#if isFinite(zx) && isFinite(zy)}
+										<circle
+											cx={zx * 20}
+											cy={-zy * 20}
+											r="2"
+											fill="none"
+											stroke="red"
+											vector-effect="non-scaling-stroke"
+											class:selected-zero={selectedPoleZero ==
+												`z-${i}`}
+										>
+											<title>Root</title>
+										</circle>
 
-									<circle
-										cx={zx * 20}
-										cy={-zy * 20}
-										r="3"
-										fill="none"
-										stroke="none"
-										vector-effect="non-scaling-stroke"
-										pointer-events="all"
-										on:mousedown={(e) => {
-											e.stopPropagation();
-										}}
-										on:click={(e) => {
-											e.stopPropagation();
-											selectedPoleZero = `z-${i}`;
-										}}
-									>
-									</circle>
+										<circle
+											cx={zx * 20}
+											cy={-zy * 20}
+											r="3"
+											fill="none"
+											stroke="none"
+											vector-effect="non-scaling-stroke"
+											pointer-events="all"
+											on:mousedown={(e) => {
+												e.stopPropagation();
+											}}
+											on:click={(e) => {
+												e.stopPropagation();
+												selectedPoleZero = `z-${i}`;
+											}}
+										>
+										</circle>
+									{/if}
 								{/each}
 							{/if}
 							{#if poles.length}
 								{#each poles as [px, py], i}
-									<path
-										d="M{svgNumber.format(
-											px * 20,
-										)}, {svgNumber.format(
-											-py * 20,
-										)}m-2,-2l4,4m-4,0l4,-4"
-										vector-effect="non-scaling-stroke"
-										stroke="blue"
-										class:selected-pole={selectedPoleZero ==
-											`p-${i}`}
-									>
-										<title>Pole</title>
-									</path>
+									{#if isFinite(px) && isFinite(py)}
+										<path
+											d="M{svgNumber.format(
+												px * 20,
+											)}, {svgNumber.format(
+												-py * 20,
+											)}m-2,-2l4,4m-4,0l4,-4"
+											vector-effect="non-scaling-stroke"
+											stroke="blue"
+											class:selected-pole={selectedPoleZero ==
+												`p-${i}`}
+										>
+											<title>Pole</title>
+										</path>
 
-									<circle
-										cx={px * 20}
-										cy={-py * 20}
-										r="3"
-										fill="none"
-										stroke="none"
-										vector-effect="non-scaling-stroke"
-										pointer-events="all"
-										on:mousedown={(e) => {
-											e.stopPropagation();
-										}}
-										on:click={(e) => {
-											e.stopPropagation();
-											selectedPoleZero = `p-${i}`;
-										}}
-									>
-									</circle>
+										<circle
+											cx={px * 20}
+											cy={-py * 20}
+											r="3"
+											fill="none"
+											stroke="none"
+											vector-effect="non-scaling-stroke"
+											pointer-events="all"
+											on:mousedown={(e) => {
+												e.stopPropagation();
+											}}
+											on:click={(e) => {
+												e.stopPropagation();
+												selectedPoleZero = `p-${i}`;
+											}}
+										>
+										</circle>
+									{/if}
 								{/each}
 							{/if}
 
 							{#if selectedPoleZeroPos}
-								<circle
-									cx={selectedPoleZeroPos[0] * 20}
-									cy={-selectedPoleZeroPos[1] * 20}
-									r="5"
-									fill="none"
-									stroke="none"
-									data-polezero={selectedPoleZero}
-									on:mousedown={dragStart}
-									vector-effect="non-scaling-stroke"
-									cursor="move"
-									pointer-events="all"
-								>
-								</circle>
+								{#if isFinite(selectedPoleZeroPos[0]) && isFinite(selectedPoleZeroPos[1])}
+									<circle
+										cx={selectedPoleZeroPos[0] * 20}
+										cy={-selectedPoleZeroPos[1] * 20}
+										r="5"
+										fill="none"
+										stroke="none"
+										data-polezero={selectedPoleZero}
+										on:mousedown={dragStart}
+										vector-effect="non-scaling-stroke"
+										cursor="move"
+										pointer-events="all"
+									>
+									</circle>
+								{/if}
 							{/if}
 						</svg>
 
@@ -1230,24 +1284,38 @@
 										data-i="0"
 										data-polezero={selectedPoleZero}
 										on:input={updatePole}
-										value={formatter.format(
+										disabled={!isFinite(
 											selectedPoleZeroPos[0],
 										)}
-										type="number"
+										value={isFinite(selectedPoleZeroPos[0])
+											? formatter.format(
+													selectedPoleZeroPos[0],
+												)
+											: selectedPoleZeroPos[0]}
+										type={isFinite(selectedPoleZeroPos[0])
+											? "number"
+											: "text"}
 										min="-10"
 										max="10"
 										step="0.1"
-										style="width: 1fr; width: 50%; flex-shrink: 1;"
+										style="width: 50%; flex-shrink: 1;"
 									/>
 									+
 									<input
 										data-i="1"
 										data-polezero={selectedPoleZero}
-										on:input={updatePole}
-										value={formatter.format(
+										disabled={!isFinite(
 											selectedPoleZeroPos[1],
 										)}
-										type="number"
+										on:input={updatePole}
+										value={isFinite(selectedPoleZeroPos[1])
+											? formatter.format(
+													selectedPoleZeroPos[1],
+												)
+											: selectedPoleZeroPos[1]}
+										type={isFinite(selectedPoleZeroPos[1])
+											? "number"
+											: "text"}
 										min="-10"
 										max="10"
 										step="0.1"
